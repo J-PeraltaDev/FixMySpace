@@ -3,7 +3,7 @@ import { VerificationPanel } from "@/components/VerificationPanel";
 
 export default function VerificationPage() {
   return (
-    <ProtectedRoute allowedRoles={["cliente", "trabajador", "admin"]}>
+    <ProtectedRoute allowedRoles={["trabajador", "admin"]}>
       <div className="page-shell">
         <div className="mb-8">
           <p className="eyebrow">Verificación</p>

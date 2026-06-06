@@ -5,8 +5,8 @@ import { MobileBottomNav } from "@/components/MobileBottomNav";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "FixMySpace",
-  description: "Servicios domésticos y de mantenimiento con trabajadores locales.",
+  title: "FixMySpace Urabá",
+  description: "Servicios domésticos confiables con trabajadores verificados del Urabá.",
 };
 
 export default function RootLayout({
@@ -19,7 +19,7 @@ export default function RootLayout({
       lang="es"
       className="h-full antialiased"
     >
-      <body className="min-h-full bg-[#f7faf7] text-slate-900">
+      <body className="min-h-full bg-background text-foreground">
         <AuthProvider>
           <AppHeader />
           <main className="min-h-screen pt-16 pb-24 lg:pb-0">{children}</main>

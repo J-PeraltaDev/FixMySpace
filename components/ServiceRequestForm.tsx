@@ -206,9 +206,9 @@ export function ServiceRequestForm({ workerId }: { workerId?: string }) {
 
           <div className="soft-card grid gap-4 p-5 sm:p-6">
             <h2 className="section-title">Fotos opcionales</h2>
-            <label className="rounded-3xl border border-dashed border-emerald-900/30 bg-emerald-50/50 p-5 text-center">
-              <span className="block font-black text-emerald-950">Adjuntar fotos</span>
-              <span className="mt-1 block text-sm text-slate-600">Puedes seleccionar varias imágenes como referencia.</span>
+            <label className="rounded-xl border border-dashed border-[#c0c8c4] bg-[#f2f4f2] p-5 text-center transition hover:border-[#00261e]">
+              <span className="block font-bold text-[#00261e]">Adjuntar fotos</span>
+              <span className="mt-1 block text-sm text-[#414845]">Puedes seleccionar varias imágenes como referencia.</span>
               <input
                 className="sr-only"
                 type="file"
@@ -220,7 +220,7 @@ export function ServiceRequestForm({ workerId }: { workerId?: string }) {
             {files.length > 0 && (
               <div className="grid gap-2 sm:grid-cols-2">
                 {files.map((file) => (
-                  <span key={`${file.name}-${file.size}`} className="rounded-2xl bg-slate-50 px-4 py-3 text-sm font-semibold text-slate-700">
+                  <span key={`${file.name}-${file.size}`} className="rounded-lg bg-[#f2f4f2] px-4 py-3 text-sm font-semibold text-[#414845]">
                     {file.name}
                   </span>
                 ))}
@@ -232,14 +232,14 @@ export function ServiceRequestForm({ workerId }: { workerId?: string }) {
         <aside className="soft-card h-fit p-5 lg:sticky lg:top-24">
           <h2 className="section-title">Resumen</h2>
           {selectedWorker ? (
-            <p className="mt-3 rounded-2xl bg-emerald-50 p-4 text-sm text-emerald-900">
+            <p className="mt-3 rounded-lg bg-[#bfecdd] p-4 text-sm text-[#00261e]">
               Solicitud dirigida a <strong>{selectedWorker.fullName}</strong>. El trabajador podrá responder por chat.
             </p>
           ) : (
-            <p className="mt-3 rounded-2xl bg-slate-50 p-4 text-sm text-slate-600">Publica la solicitud para recibir respuestas de trabajadores disponibles.</p>
+            <p className="mt-3 rounded-lg bg-[#f2f4f2] p-4 text-sm text-[#414845]">Publica la solicitud para recibir respuestas de trabajadores disponibles.</p>
           )}
           {(error || status) && (
-            <p className={`mt-4 rounded-2xl px-4 py-3 text-sm font-semibold ${error ? "bg-rose-50 text-rose-700" : "bg-emerald-50 text-emerald-800"}`}>{error || status}</p>
+            <p className={`mt-4 rounded-lg px-4 py-3 text-sm font-semibold ${error ? "bg-[#ffdad6] text-[#93000a]" : "bg-[#bfecdd] text-[#00261e]"}`}>{error || status}</p>
           )}
           <button type="submit" className="primary-button mt-5 min-h-12 w-full" disabled={loading}>
             {loading ? "Publicando..." : "Publicar solicitud"}

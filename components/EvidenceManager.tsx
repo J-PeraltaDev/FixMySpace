@@ -59,18 +59,27 @@ export function EvidenceManager({
     event.preventDefault();
     setError("");
     setStatus("");
-    if (!profile || !file) {
-      setError("Selecciona una imagen para guardar evidencia.");
+    if (!profile) {
+      setError("Inicia sesión para guardar evidencia.");
       return;
     }
 
     const data = new FormData(event.currentTarget);
     const phase = String(data.get("phase") || "before") as JobEvidence["phase"];
     const description = String(data.get("description") || "").trim();
+    let imageUrl = "";
+    let uploadFailed = false;
 
     try {
       setSaving(true);
-      const imageUrl = await uploadImage(file, `jobEvidences/${bookingId}`);
+      if (file) {
+        try {
+          imageUrl = await uploadImage(file, `jobEvidences/${bookingId}`);
+        } catch {
+          uploadFailed = true;
+        }
+      }
+
       const evidenceRef = await addDoc(collection(db, "jobEvidences"), {
         bookingId,
         workerId: workerId || profile.uid,
@@ -84,7 +93,7 @@ export function EvidenceManager({
         await createNotification({
           userId: clientId,
           type: "evidence",
-          title: "Nueva evidencia fotográfica",
+          title: imageUrl ? "Nueva evidencia fotográfica" : "Nueva evidencia",
           message: `Se agregó evidencia de fase ${phaseLabels[phase].toLowerCase()} a tu servicio.`,
           relatedEntityId: evidenceRef.id,
           relatedEntityType: "jobEvidence",
@@ -104,10 +113,10 @@ export function EvidenceManager({
         ...current,
       ]);
       setFile(null);
-      setStatus("Evidencia guardada en Storage y Firestore.");
+      setStatus(uploadFailed ? "Evidencia guardada en Firestore, pero la foto no pudo subirse a Storage." : imageUrl ? "Evidencia guardada con foto." : "Evidencia guardada sin foto.");
       event.currentTarget.reset();
     } catch {
-      setError("No pudimos subir la evidencia.");
+      setError("No pudimos guardar la evidencia en Firestore.");
     } finally {
       setSaving(false);
     }
@@ -132,7 +141,7 @@ export function EvidenceManager({
               </select>
             </label>
             <label className="field">
-              <span>Imagen</span>
+              <span>Imagen opcional</span>
               <input type="file" accept="image/*" onChange={(event) => setFile(event.target.files?.[0] || null)} />
             </label>
           </div>
@@ -150,9 +159,13 @@ export function EvidenceManager({
       <div className="mt-4 grid gap-3 sm:grid-cols-3">
         {evidences.map((evidence) => (
           <article key={evidence.id} className="overflow-hidden rounded-3xl bg-white">
-            <div className="relative h-36 bg-slate-100">
-              <Image src={evidence.imageUrl} alt={`Evidencia ${phaseLabels[evidence.phase]}`} fill className="object-cover" sizes="(min-width: 640px) 33vw, 100vw" />
-            </div>
+            {evidence.imageUrl ? (
+              <div className="relative h-36 bg-slate-100">
+                <Image src={evidence.imageUrl} alt={`Evidencia ${phaseLabels[evidence.phase]}`} fill className="object-cover" sizes="(min-width: 640px) 33vw, 100vw" />
+              </div>
+            ) : (
+              <div className="grid h-24 place-items-center bg-[#f2f4f2] px-4 text-center text-sm font-semibold text-[#5f5e5a]">Evidencia sin foto</div>
+            )}
             <div className="p-3">
               <p className="text-sm font-black text-emerald-900">{phaseLabels[evidence.phase]}</p>
               {evidence.description && <p className="mt-1 text-sm text-slate-600">{evidence.description}</p>}

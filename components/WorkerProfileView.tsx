@@ -61,25 +61,55 @@ export function WorkerProfileView({ workerId }: { workerId: string }) {
 
   return (
     <div className="page-shell">
-      {error && <p className="mb-4 rounded-2xl bg-amber-50 px-4 py-3 text-sm font-semibold text-amber-800">{error}</p>}
-      <section className="soft-card overflow-hidden">
-        <div className="bg-emerald-950 p-6 text-white sm:p-8">
-          <div className="flex flex-col gap-6 sm:flex-row sm:items-center">
+      {error && <p className="mb-4 rounded-lg bg-[#ffdcc0] px-4 py-3 text-sm font-semibold text-[#542d00]">{error}</p>}
+      <section className="grid gap-8 lg:grid-cols-[360px_1fr]">
+        <aside className="soft-card h-fit p-6 text-center lg:sticky lg:top-24">
+          <div className="flex flex-col items-center">
             <WorkerAvatar worker={worker} size="lg" />
-            <div>
-              <div className="flex flex-wrap items-center gap-2">
-                <h1 className="text-4xl font-black">{worker.fullName}</h1>
-                <span className={`rounded-full px-3 py-1 text-xs font-black ${worker.verified ? "bg-white text-emerald-950" : "bg-amber-100 text-amber-900"}`}>
-                  {worker.verified ? "Verificado" : "Verificación pendiente"}
-                </span>
-              </div>
-              <p className="mt-2 text-emerald-100">{worker.specialties.length ? worker.specialties.join(" · ") : "Oficios por completar"}</p>
-              <p className="mt-4 max-w-3xl text-emerald-50">{worker.bio}</p>
+            <h1 className="mt-4 text-3xl font-bold text-[#191c1b]">{worker.fullName}</h1>
+            <p className="mt-2 text-sm font-semibold text-[#5f5e5a]">{worker.specialties.length ? worker.specialties.join(" · ") : "Oficios por completar"}</p>
+            <span className={`mt-4 rounded-lg px-3 py-2 text-xs font-bold ${worker.verified ? "bg-[#bfecdd] text-[#00261e]" : "bg-[#ffdcc0] text-[#542d00]"}`}>
+              {worker.verified ? "Identidad verificada" : "Verificacion pendiente"}
+            </span>
+          </div>
+
+          <div className="mt-6 grid grid-cols-2 gap-3">
+            <div className="rounded-lg bg-[#f2f4f2] p-3">
+              <span className="block text-2xl font-bold text-[#00261e]">{worker.experienceYears}+</span>
+              <span className="text-xs font-semibold text-[#5f5e5a]">Años exp.</span>
+            </div>
+            <div className="rounded-lg bg-[#f2f4f2] p-3">
+              <span className="block text-2xl font-bold text-[#00261e]">{worker.completedJobs}</span>
+              <span className="text-xs font-semibold text-[#5f5e5a]">Trabajos</span>
             </div>
           </div>
-        </div>
 
-        <div className="grid gap-6 p-5 sm:p-8 lg:grid-cols-[1fr_320px]">
+          <div className="mt-6 rounded-xl border border-[#c0c8c4] bg-[#bfecdd]/30 p-5 text-left">
+            <h2 className="text-xs font-bold uppercase tracking-wide text-[#414845]">Garantia FixMySpace</h2>
+            <div className="mt-4 grid gap-3 text-sm font-semibold text-[#191c1b]">
+              <p>Identidad y perfil revisados</p>
+              <p>Historial de trabajos visible</p>
+              <p>Calificaciones de clientes</p>
+            </div>
+          </div>
+
+          <div className="mt-6 grid gap-3">
+            <Link href={`/solicitudes/nueva?worker=${worker.uid}`} className="primary-button">
+              Crear solicitud
+            </Link>
+            <Link href={`/chat/${worker.uid}`} className="secondary-button justify-center">
+              Abrir chat
+            </Link>
+          </div>
+        </aside>
+
+        <div className="grid gap-8">
+          <div>
+            <p className="eyebrow">Perfil profesional</p>
+            <h2 className="mt-3 text-4xl font-bold leading-tight text-[#191c1b]">Sobre mi trabajo</h2>
+            <p className="mt-4 max-w-3xl text-base leading-7 text-[#414845]">{worker.bio}</p>
+          </div>
+
           <div className="grid gap-6">
             <div className="grid gap-3 sm:grid-cols-4">
               {[
@@ -88,9 +118,9 @@ export function WorkerProfileView({ workerId }: { workerId: string }) {
                 ["Experiencia", `${worker.experienceYears} años`],
                 ["Tarifa", worker.hourlyRate ? `$${worker.hourlyRate.toLocaleString("es-CO")}` : "Por acordar"],
               ].map(([label, value]) => (
-                <div key={label} className="rounded-3xl bg-slate-50 p-4">
-                  <p className="text-sm text-slate-500">{label}</p>
-                  <p className="mt-1 text-xl font-black text-slate-950">{value}</p>
+                <div key={label} className="rounded-xl border border-[#c0c8c4] bg-[#f2f4f2] p-4">
+                  <p className="text-sm text-[#5f5e5a]">{label}</p>
+                  <p className="mt-1 text-xl font-bold text-[#191c1b]">{value}</p>
                 </div>
               ))}
             </div>
@@ -99,7 +129,7 @@ export function WorkerProfileView({ workerId }: { workerId: string }) {
               <h2 className="section-title">Cobertura</h2>
               <div className="mt-3 flex flex-wrap gap-2">
                 {(worker.coverageAreas.length ? worker.coverageAreas : [worker.municipality]).map((area) => (
-                  <span key={area} className="rounded-full bg-emerald-50 px-4 py-2 text-sm font-black text-emerald-900">
+                  <span key={area} className="trust-chip">
                     {area}
                   </span>
                 ))}
@@ -111,31 +141,18 @@ export function WorkerProfileView({ workerId }: { workerId: string }) {
               <div className="mt-3 grid gap-3">
                 {reviews.length ? (
                   reviews.map((review) => (
-                    <article key={review.id} className="rounded-3xl bg-slate-50 p-4">
-                      <p className="font-black text-slate-950">{review.rating} de 5</p>
-                      <p className="mt-1 text-sm leading-6 text-slate-600">{review.comment}</p>
-                      <p className="mt-2 text-xs font-semibold text-slate-400">{timestampToText(review.createdAt)}</p>
+                    <article key={review.id} className="rounded-xl border border-[#c0c8c4] bg-white p-4">
+                      <p className="font-bold text-[#191c1b]">{review.rating} de 5</p>
+                      <p className="mt-1 text-sm leading-6 text-[#414845]">{review.comment}</p>
+                      <p className="mt-2 text-xs font-semibold text-[#5f5e5a]">{timestampToText(review.createdAt)}</p>
                     </article>
                   ))
                 ) : (
-                  <p className="rounded-3xl bg-slate-50 p-4 text-sm text-slate-600">Este perfil aún no tiene reseñas visibles.</p>
+                  <p className="rounded-xl border border-[#c0c8c4] bg-[#f2f4f2] p-4 text-sm text-[#414845]">Este perfil aún no tiene reseñas visibles.</p>
                 )}
               </div>
             </section>
           </div>
-
-          <aside className="h-fit rounded-[1.75rem] border border-slate-100 bg-slate-50 p-5">
-            <h2 className="section-title">Contratar</h2>
-            <p className="mt-3 text-sm leading-6 text-slate-600">Agenda una visita o abre una conversación para aclarar detalles antes del servicio.</p>
-            <div className="mt-5 grid gap-3">
-              <Link href={`/solicitudes/nueva?worker=${worker.uid}`} className="primary-button">
-                Crear solicitud
-              </Link>
-              <Link href={`/chat/${worker.uid}`} className="secondary-button justify-center">
-                Abrir chat
-              </Link>
-            </div>
-          </aside>
         </div>
       </section>
 

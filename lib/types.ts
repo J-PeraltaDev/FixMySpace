@@ -91,7 +91,7 @@ export type JobEvidence = {
   bookingId: string;
   workerId: string;
   phase: "before" | "during" | "after";
-  imageUrl: string;
+  imageUrl?: string;
   description?: string;
   createdAt?: unknown;
 };

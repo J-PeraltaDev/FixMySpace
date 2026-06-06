@@ -1,6 +1,6 @@
 "use client";
 
-import { addDoc, collection, doc, onSnapshot, query, serverTimestamp, setDoc, where } from "firebase/firestore";
+import { addDoc, collection, doc, getDoc, onSnapshot, query, serverTimestamp, setDoc, where } from "firebase/firestore";
 import { FormEvent, useEffect, useMemo, useState } from "react";
 import { db } from "@/firebase";
 import { createNotification, fetchWorkerById, timestampToText } from "@/lib/firebase-data";
@@ -34,21 +34,43 @@ export function ChatThread({ conversationId }: { conversationId: string }) {
       setLoading(true);
       setError("");
       try {
-        const workerProfile = await fetchWorkerById(conversationId);
-        const resolvedWorker = workerProfile || fallbackWorkers.find((item) => item.uid === conversationId) || null;
-        const resolvedConversationId = resolvedWorker ? [profile.uid, resolvedWorker.uid].sort().join("_") : conversationId;
+        const [workerProfile, userSnapshot] = await Promise.all([
+          fetchWorkerById(conversationId),
+          getDoc(doc(db, "users", conversationId)),
+        ]);
+        const fallbackWorker = fallbackWorkers.find((item) => item.uid === conversationId) || null;
+        const userData = userSnapshot.exists() ? userSnapshot.data() : null;
+        const resolvedWorker =
+          workerProfile ||
+          fallbackWorker ||
+          (userData
+            ? ({
+                uid: conversationId,
+                fullName: typeof userData.fullName === "string" ? userData.fullName : "Usuario FixMySpace",
+                municipality: typeof userData.municipality === "string" ? userData.municipality : "",
+                avatarUrl: typeof userData.avatarUrl === "string" ? userData.avatarUrl : "",
+                specialties: [typeof userData.role === "string" ? userData.role : "Chat"],
+                coverageAreas: [],
+                bio: "",
+                experienceYears: 0,
+                hourlyRate: 0,
+                verified: false,
+                ratingAvg: 0,
+                completedJobs: 0,
+                distanceKm: 0,
+                responseTime: "Conversación",
+              } satisfies WorkerProfile)
+            : null);
+        const resolvedConversationId = [profile.uid, conversationId].sort().join("_");
 
-        if (resolvedWorker) {
-          await setDoc(
-            doc(db, "conversations", resolvedConversationId),
-            {
-              participantIds: [profile.uid, resolvedWorker.uid],
-              lastMessage: "",
-              updatedAt: serverTimestamp(),
-            },
-            { merge: true },
-          );
-        }
+        await setDoc(
+          doc(db, "conversations", resolvedConversationId),
+          {
+            participantIds: [profile.uid, conversationId],
+            updatedAt: serverTimestamp(),
+          },
+          { merge: true },
+        );
 
         if (!cancelled) {
           setWorker(resolvedWorker);
@@ -154,39 +176,39 @@ export function ChatThread({ conversationId }: { conversationId: string }) {
 
   return (
     <div className="page-shell">
-      <div className="mx-auto flex min-h-[calc(100vh-9rem)] max-w-4xl flex-col overflow-hidden rounded-[2rem] border border-emerald-950/10 bg-white shadow-sm">
-        <header className="flex items-center gap-4 border-b border-slate-100 p-4">
+      <div className="mx-auto flex min-h-[calc(100vh-9rem)] max-w-4xl flex-col overflow-hidden rounded-xl border border-[#c0c8c4] bg-white shadow-sm">
+        <header className="flex items-center gap-4 border-b border-[#c0c8c4] p-4">
           <WorkerAvatar worker={headerWorker} size="sm" />
           <div>
-            <h1 className="text-lg font-black text-slate-950">{headerWorker.fullName}</h1>
-            <p className="text-sm font-semibold text-emerald-800">{headerWorker.responseTime} · {headerWorker.specialties[0] || "Conversación"}</p>
+            <h1 className="text-lg font-bold text-[#191c1b]">{headerWorker.fullName}</h1>
+            <p className="text-sm font-semibold text-[#5f5e5a]">{headerWorker.responseTime} · {headerWorker.specialties[0] || "Conversación"}</p>
           </div>
-          <span className="ml-auto rounded-full bg-emerald-50 px-3 py-1 text-xs font-black text-emerald-800">{loading ? "Cargando" : "Activo"}</span>
+          <span className="ml-auto rounded-md bg-[#bfecdd] px-3 py-1 text-xs font-bold text-[#00261e]">{loading ? "Cargando" : "Activo"}</span>
         </header>
 
-        {error && <p className="m-4 rounded-2xl bg-rose-50 px-4 py-3 text-sm font-semibold text-rose-700">{error}</p>}
+        {error && <p className="m-4 rounded-lg bg-[#ffdad6] px-4 py-3 text-sm font-semibold text-[#93000a]">{error}</p>}
 
-        <div className="flex-1 space-y-4 overflow-y-auto bg-slate-50/70 p-4 sm:p-6">
+        <div className="flex-1 space-y-4 overflow-y-auto bg-[#f2f4f2] p-4 sm:p-6">
           {visibleMessages.length ? (
             visibleMessages.map((message) => {
               const isMine = message.senderId === profile?.uid || (!profile && message.senderId !== headerWorker.uid);
               return (
                 <div key={message.id} className={`flex ${isMine ? "justify-end" : "justify-start"}`}>
-                  <div className={`max-w-[82%] rounded-3xl px-4 py-3 shadow-sm sm:max-w-[68%] ${isMine ? "bg-emerald-950 text-white" : "bg-white text-slate-700"}`}>
+                  <div className={`max-w-[82%] rounded-xl px-4 py-3 shadow-sm sm:max-w-[68%] ${isMine ? "bg-[#00261e] text-white" : "bg-white text-[#414845]"}`}>
                     <p className="text-sm leading-6">{message.text}</p>
-                    <p className={`mt-1 text-xs ${isMine ? "text-emerald-100" : "text-slate-400"}`}>{timestampToText(message.createdAt)}</p>
+                    <p className={`mt-1 text-xs ${isMine ? "text-[#bfecdd]" : "text-[#5f5e5a]"}`}>{timestampToText(message.createdAt)}</p>
                   </div>
                 </div>
               );
             })
           ) : (
-            <div className="rounded-3xl bg-white p-5 text-center text-sm font-semibold text-slate-500">Aún no hay mensajes. Escribe el primero para iniciar la conversación.</div>
+            <div className="rounded-xl bg-white p-5 text-center text-sm font-semibold text-[#5f5e5a]">Aún no hay mensajes. Escribe el primero para iniciar la conversación.</div>
           )}
         </div>
 
-        <form onSubmit={submit} className="flex gap-3 border-t border-slate-100 bg-white p-3 sm:p-4">
+        <form onSubmit={submit} className="flex gap-3 border-t border-[#c0c8c4] bg-white p-3 sm:p-4">
           <input
-            className="min-h-12 flex-1 rounded-full border border-slate-200 px-4 text-sm outline-none focus:border-emerald-900"
+            className="min-h-12 flex-1 rounded-lg border border-[#c0c8c4] px-4 text-sm outline-none focus:border-[#00261e]"
             value={draft}
             onChange={(event) => setDraft(event.target.value)}
             placeholder="Escribe un mensaje"

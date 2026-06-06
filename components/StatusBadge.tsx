@@ -12,21 +12,21 @@ const statusLabels: Record<string, string> = {
 };
 
 const statusStyles: Record<string, string> = {
-  pending: "bg-amber-50 text-amber-800 ring-amber-200",
-  accepted: "bg-sky-50 text-sky-800 ring-sky-200",
-  scheduled: "bg-emerald-50 text-emerald-800 ring-emerald-200",
-  completed: "bg-slate-100 text-slate-700 ring-slate-200",
-  cancelled: "bg-rose-50 text-rose-800 ring-rose-200",
-  unread: "bg-emerald-700 text-white ring-emerald-700",
-  read: "bg-slate-100 text-slate-600 ring-slate-200",
-  verified: "bg-emerald-50 text-emerald-800 ring-emerald-200",
-  rejected: "bg-rose-50 text-rose-800 ring-rose-200",
-  attended: "bg-slate-100 text-slate-700 ring-slate-200",
+  pending: "bg-[#ffdcc0] text-[#542d00] ring-[#ffb876]",
+  accepted: "bg-[#e5e2dc] text-[#1c1c18] ring-[#c9c6c1]",
+  scheduled: "bg-[#bfecdd] text-[#00261e] ring-[#a4d0c1]",
+  completed: "bg-[#eceeec] text-[#414845] ring-[#c0c8c4]",
+  cancelled: "bg-[#ffdad6] text-[#93000a] ring-[#ba1a1a]/20",
+  unread: "bg-[#00261e] text-white ring-[#00261e]",
+  read: "bg-[#eceeec] text-[#5f5e5a] ring-[#c0c8c4]",
+  verified: "bg-[#bfecdd] text-[#00261e] ring-[#a4d0c1]",
+  rejected: "bg-[#ffdad6] text-[#93000a] ring-[#ba1a1a]/20",
+  attended: "bg-[#eceeec] text-[#414845] ring-[#c0c8c4]",
 };
 
 export function StatusBadge({ status }: { status: string }) {
   return (
-    <span className={`inline-flex rounded-full px-3 py-1 text-xs font-bold ring-1 ${statusStyles[status] || statusStyles.read}`}>
+    <span className={`inline-flex rounded-md px-3 py-1 text-xs font-bold ring-1 ${statusStyles[status] || statusStyles.read}`}>
       {statusLabels[status] || status}
     </span>
   );

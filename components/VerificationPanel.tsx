@@ -68,25 +68,25 @@ export function VerificationPanel() {
           <h2 className="section-title">Estado de verificación</h2>
           <StatusBadge status={verificationStatus} />
         </div>
-        <p className="mt-4 text-sm leading-6 text-slate-600">
+        <p className="mt-4 text-sm leading-6 text-[#414845]">
           Completa tu perfil profesional con oficios, zonas de cobertura, experiencia, tarifa y biografía. Administración podrá revisar estos datos y aprobar tu perfil.
         </p>
         <div className="mt-5 grid gap-3 sm:grid-cols-2">
-          <div className="rounded-3xl bg-slate-50 p-4">
-            <p className="text-sm text-slate-500">Oficios</p>
-            <p className="mt-1 font-black text-slate-950">{workerProfile?.specialties?.join(", ") || "Pendiente"}</p>
+          <div className="rounded-xl bg-[#f2f4f2] p-4">
+            <p className="text-sm text-[#5f5e5a]">Oficios</p>
+            <p className="mt-1 font-bold text-[#191c1b]">{workerProfile?.specialties?.join(", ") || "Pendiente"}</p>
           </div>
-          <div className="rounded-3xl bg-slate-50 p-4">
-            <p className="text-sm text-slate-500">Cobertura</p>
-            <p className="mt-1 font-black text-slate-950">{workerProfile?.coverageAreas?.join(", ") || "Pendiente"}</p>
+          <div className="rounded-xl bg-[#f2f4f2] p-4">
+            <p className="text-sm text-[#5f5e5a]">Cobertura</p>
+            <p className="mt-1 font-bold text-[#191c1b]">{workerProfile?.coverageAreas?.join(", ") || "Pendiente"}</p>
           </div>
         </div>
-        {workerProfile?.verificationNotes && <p className="mt-5 rounded-3xl bg-emerald-50 p-4 text-sm font-semibold text-emerald-900">{workerProfile.verificationNotes}</p>}
+        {workerProfile?.verificationNotes && <p className="mt-5 rounded-xl bg-[#bfecdd] p-4 text-sm font-semibold text-[#00261e]">{workerProfile.verificationNotes}</p>}
       </section>
 
       <aside className="soft-card h-fit p-5">
         <h2 className="section-title">Siguiente paso</h2>
-        <p className="mt-3 text-sm leading-6 text-slate-600">Actualiza tu perfil si falta información o si tu verificación fue rechazada.</p>
+        <p className="mt-3 text-sm leading-6 text-[#414845]">Actualiza tu perfil si falta información o si tu verificación fue rechazada.</p>
         <Link href="/perfil" className="primary-button mt-5 w-full">
           Completar perfil
         </Link>

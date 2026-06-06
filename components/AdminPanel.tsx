@@ -162,12 +162,12 @@ export function AdminPanel() {
         <div className="mt-4 grid gap-3">
           {workersToReview.length ? (
             workersToReview.map((worker) => (
-              <article key={worker.uid} className="rounded-3xl bg-slate-50 p-4">
+              <article key={worker.uid} className="rounded-xl bg-[#f2f4f2] p-4">
                 <div className="flex flex-wrap items-start justify-between gap-3">
                   <div>
-                    <h3 className="font-black text-slate-950">{worker.fullName}</h3>
-                    <p className="mt-1 text-sm text-slate-600">{worker.specialties.join(", ") || "Sin oficios registrados"}</p>
-                    <p className="mt-1 text-xs font-semibold text-slate-400">{worker.municipality}</p>
+                    <h3 className="font-bold text-[#191c1b]">{worker.fullName}</h3>
+                    <p className="mt-1 text-sm text-[#414845]">{worker.specialties.join(", ") || "Sin oficios registrados"}</p>
+                    <p className="mt-1 text-xs font-semibold text-[#5f5e5a]">{worker.municipality}</p>
                   </div>
                   <StatusBadge status={worker.verificationStatus || "pending"} />
                 </div>
@@ -195,15 +195,15 @@ export function AdminPanel() {
           <h2 className="section-title">Solicitudes</h2>
           <div className="mt-4 grid gap-3">
             {data.serviceRequests.slice(0, 8).map((request) => (
-              <article key={request.id} className="rounded-3xl bg-slate-50 p-4">
+              <article key={request.id} className="rounded-xl bg-[#f2f4f2] p-4">
                 <div className="flex flex-wrap items-start justify-between gap-3">
                   <div>
-                    <h3 className="font-black text-slate-950">{request.title}</h3>
-                    <p className="mt-1 text-sm text-slate-600">{request.category} · {request.municipality}</p>
+                    <h3 className="font-bold text-[#191c1b]">{request.title}</h3>
+                    <p className="mt-1 text-sm text-[#414845]">{request.category} · {request.municipality}</p>
                   </div>
                   <StatusBadge status={request.status} />
                 </div>
-                <select className="mt-3 rounded-2xl border border-slate-200 px-3 py-2 text-sm font-bold" value={request.status} onChange={(event) => updateRequestStatus(request, event.target.value)}>
+                <select className="mt-3 rounded-lg border border-[#c0c8c4] px-3 py-2 text-sm font-bold" value={request.status} onChange={(event) => updateRequestStatus(request, event.target.value)}>
                   {serviceRequestStatuses.map((status) => (
                     <option key={status} value={status}>
                       {status}
@@ -220,12 +220,12 @@ export function AdminPanel() {
           <h2 className="section-title">Reportes y soporte</h2>
           <div className="mt-4 grid gap-3">
             {data.reports.map((report) => (
-              <article key={report.id} className="rounded-3xl bg-slate-50 p-4">
+              <article key={report.id} className="rounded-xl bg-[#f2f4f2] p-4">
                 <div className="flex flex-wrap items-start justify-between gap-3">
                   <div>
-                    <h3 className="font-black text-slate-950">{report.subject}</h3>
-                    <p className="mt-1 text-sm leading-6 text-slate-600">{report.message}</p>
-                    <p className="mt-2 text-xs font-semibold text-slate-400">{timestampToText(report.createdAt)}</p>
+                    <h3 className="font-bold text-[#191c1b]">{report.subject}</h3>
+                    <p className="mt-1 text-sm leading-6 text-[#414845]">{report.message}</p>
+                    <p className="mt-2 text-xs font-semibold text-[#5f5e5a]">{timestampToText(report.createdAt)}</p>
                   </div>
                   <StatusBadge status={report.status === "attended" ? "completed" : "pending"} />
                 </div>
@@ -244,15 +244,15 @@ export function AdminPanel() {
       <section className="grid gap-6 lg:grid-cols-3">
         <div className="soft-card p-5">
           <h2 className="section-title">Bookings</h2>
-          <p className="mt-3 text-4xl font-black text-emerald-950">{data.bookings.length}</p>
+          <p className="mt-3 text-4xl font-bold text-[#00261e]">{data.bookings.length}</p>
         </div>
         <div className="soft-card p-5">
           <h2 className="section-title">Calificaciones</h2>
-          <p className="mt-3 text-4xl font-black text-emerald-950">{data.reviews.length}</p>
+          <p className="mt-3 text-4xl font-bold text-[#00261e]">{data.reviews.length}</p>
         </div>
         <div className="soft-card p-5">
           <h2 className="section-title">Notificaciones</h2>
-          <p className="mt-3 text-4xl font-black text-emerald-950">{data.notifications.length}</p>
+          <p className="mt-3 text-4xl font-bold text-[#00261e]">{data.notifications.length}</p>
         </div>
       </section>
     </div>

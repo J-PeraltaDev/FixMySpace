@@ -58,12 +58,12 @@ export function SearchDirectory({ initialCategory = "", initialMunicipality = ""
     <div className="page-shell">
       <div className="mb-8">
         <p className="eyebrow">Directorio local</p>
-        <h1 className="mt-3 text-4xl font-black text-slate-950">Encuentra trabajadores por oficio, municipio y confianza.</h1>
+        <h1 className="mt-3 max-w-3xl text-4xl font-bold leading-tight text-[#191c1b]">Encuentra trabajadores por oficio, municipio y confianza.</h1>
       </div>
 
       <div className="grid gap-6 lg:grid-cols-[320px_1fr]">
         <aside className="soft-card h-fit p-5 lg:sticky lg:top-24">
-          <h2 className="text-lg font-black text-slate-950">Filtros</h2>
+          <h2 className="text-lg font-bold text-[#191c1b]">Filtros</h2>
           <div className="mt-5 grid gap-4">
             <label className="field">
               <span>Oficio</span>
@@ -87,9 +87,9 @@ export function SearchDirectory({ initialCategory = "", initialMunicipality = ""
                 ))}
               </select>
             </label>
-            <label className="flex items-center justify-between rounded-2xl border border-slate-200 px-4 py-3 text-sm font-bold text-slate-700">
+            <label className="flex items-center justify-between rounded-lg border border-[#c0c8c4] px-4 py-3 text-sm font-semibold text-[#414845]">
               Solo verificados
-              <input type="checkbox" checked={verifiedOnly} onChange={(event) => setVerifiedOnly(event.target.checked)} />
+              <input className="accent-[#00261e]" type="checkbox" checked={verifiedOnly} onChange={(event) => setVerifiedOnly(event.target.checked)} />
             </label>
             <label className="field">
               <span>Calificación mínima</span>
@@ -102,19 +102,19 @@ export function SearchDirectory({ initialCategory = "", initialMunicipality = ""
             <label className="field">
               <span>Precio máximo por hora</span>
               <input type="range" min="30000" max="70000" step="5000" value={maxRate} onChange={(event) => setMaxRate(event.target.value)} />
-              <strong className="text-sm text-emerald-900">${Number(maxRate).toLocaleString("es-CO")}</strong>
+              <strong className="text-sm text-[#00261e]">${Number(maxRate).toLocaleString("es-CO")}</strong>
             </label>
           </div>
         </aside>
 
         <section>
           <div className="mb-4 flex items-center justify-between gap-4">
-            <p className="text-sm font-bold text-slate-600">{loading ? "Buscando trabajadores..." : `${results.length} trabajadores encontrados`}</p>
-            <span className="rounded-full bg-white px-4 py-2 text-xs font-black text-emerald-900 shadow-sm">
+            <p className="text-sm font-bold text-[#5f5e5a]">{loading ? "Buscando trabajadores..." : `${results.length} trabajadores encontrados`}</p>
+            <span className="rounded-lg border border-[#c0c8c4] bg-white px-4 py-2 text-xs font-bold text-[#00261e] shadow-sm">
               {error ? "Fallback visual" : "Firestore"}
             </span>
           </div>
-          {error && <p className="mb-4 rounded-2xl bg-amber-50 px-4 py-3 text-sm font-semibold text-amber-800">{error}</p>}
+          {error && <p className="mb-4 rounded-lg bg-[#ffdcc0] px-4 py-3 text-sm font-semibold text-[#542d00]">{error}</p>}
           {loading ? (
             <div className="grid gap-4 xl:grid-cols-2">
               {[0, 1].map((item) => (

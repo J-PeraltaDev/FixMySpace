@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useEffect, useState } from "react";
 import { fetchUserBookings, fetchUserHistory, timestampToText } from "@/lib/firebase-data";
 import type { Booking, JobHistory } from "@/lib/types";
@@ -8,7 +9,7 @@ import { EmptyState } from "./EmptyState";
 import { EvidenceManager } from "./EvidenceManager";
 import { StatusBadge } from "./StatusBadge";
 
-export function HistoryTimeline() {
+export function HistoryTimeline({ focusBookingId = "" }: { focusBookingId?: string }) {
   const { profile } = useAuth();
   const [history, setHistory] = useState<JobHistory[]>([]);
   const [bookings, setBookings] = useState<Booking[]>([]);
@@ -73,13 +74,22 @@ export function HistoryTimeline() {
           }) satisfies JobHistory,
       );
 
-  if (!rows.length) {
+  const visibleRows = focusBookingId ? rows.filter((item) => item.bookingId === focusBookingId) : rows;
+
+  if (!visibleRows.length) {
+    if (focusBookingId) {
+      return <EmptyState title="No encontramos ese servicio en tu historial" message="Revisa el historial completo o vuelve al panel para abrir otro servicio." actionHref="/historial" actionLabel="Ver historial completo" />;
+    }
     return <EmptyState title="Tu historial está vacío" message="Los servicios agendados, completados o cancelados aparecerán aquí junto con sus eventos y evidencias." />;
   }
 
   return (
     <div className="grid gap-4">
-      {rows.map((item) => (
+      {visibleRows.map((item) => {
+        const counterpartId = profile?.role === "trabajador" ? item.clientId : item.workerId;
+        const counterpartLabel = profile?.role === "trabajador" ? "Mensaje al cliente" : "Mensaje al trabajador";
+
+        return (
         <article key={item.id} className="soft-card p-5">
           <div className="flex gap-4">
             <div className="mt-1 h-4 w-4 rounded-full bg-emerald-800 ring-8 ring-emerald-50" />
@@ -92,6 +102,18 @@ export function HistoryTimeline() {
                 </div>
                 <StatusBadge status={item.status || "completed"} />
               </div>
+              {counterpartId && (
+                <div className="mt-4 flex flex-wrap gap-2">
+                  <Link href={`/chat/${counterpartId}`} className="primary-button">
+                    {counterpartLabel}
+                  </Link>
+                  {focusBookingId && (
+                    <Link href="/historial" className="secondary-button">
+                      Ver todo el historial
+                    </Link>
+                  )}
+                </div>
+              )}
               <div className="mt-4 grid gap-2">
                 {item.events.map((event) => (
                   <p key={event} className="rounded-2xl bg-slate-50 px-4 py-3 text-sm leading-6 text-slate-600">
@@ -103,7 +125,8 @@ export function HistoryTimeline() {
             </div>
           </div>
         </article>
-      ))}
+        );
+      })}
     </div>
   );
 }
