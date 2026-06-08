@@ -1,46 +1,72 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
-import { fetchWorkers } from "@/lib/firebase-data";
+import { useMemo, useState } from "react";
+import { useCollection } from "@/hooks/useCollection";
 import { municipalities, serviceCategories, workers as fallbackWorkers } from "@/lib/mock-data";
 import type { WorkerProfile } from "@/lib/types";
 import { EmptyState } from "./EmptyState";
 import { WorkerCard } from "./WorkerCard";
+import { LoadingSkeleton } from "./ui/LoadingSkeleton";
+
+type CollectionWorkerProfile = Partial<WorkerProfile> & { id?: string };
+
+function asString(value: unknown, fallback = "") {
+  return typeof value === "string" ? value : fallback;
+}
+
+function asNumber(value: unknown, fallback = 0) {
+  return typeof value === "number" && Number.isFinite(value) ? value : fallback;
+}
+
+function asStringArray(value: unknown) {
+  return Array.isArray(value) ? value.filter((item): item is string => typeof item === "string") : [];
+}
+
+function mergeWorkerProfile(profile: CollectionWorkerProfile): WorkerProfile {
+  const uid = asString(profile.uid, asString(profile.id, ""));
+  const fallback = fallbackWorkers.find((worker) => worker.uid === uid);
+  const specialties = asStringArray(profile.specialties);
+  const coverageAreas = asStringArray(profile.coverageAreas);
+
+  return {
+    uid,
+    fullName: asString(profile.fullName, fallback?.fullName || "Trabajador FixMySpace"),
+    municipality: asString(profile.municipality, fallback?.municipality || ""),
+    avatarUrl: asString(profile.avatarUrl, fallback?.avatarUrl || ""),
+    specialties: specialties.length ? specialties : fallback?.specialties || [],
+    coverageAreas: coverageAreas.length ? coverageAreas : fallback?.coverageAreas || [],
+    bio: asString(profile.bio, fallback?.bio || "Perfil profesional en construcción."),
+    experienceYears: asNumber(profile.experienceYears, fallback?.experienceYears || 0),
+    hourlyRate: asNumber(profile.hourlyRate, fallback?.hourlyRate || 0),
+    verified: Boolean(profile.verified),
+    verificationStatus: profile.verificationStatus ?? (profile.verified ? "verified" : "pending"),
+    verificationNotes: asString(profile.verificationNotes),
+    verifiedAt: profile.verifiedAt,
+    verifiedBy: asString(profile.verifiedBy),
+    ratingAvg: asNumber(profile.ratingAvg, fallback?.ratingAvg || 0),
+    completedJobs: asNumber(profile.completedJobs, fallback?.completedJobs || 0),
+    distanceKm: asNumber(profile.distanceKm, fallback?.distanceKm || 0),
+    responseTime: asString(profile.responseTime, fallback?.responseTime || "Responde pronto"),
+  };
+}
 
 export function SearchDirectory({ initialCategory = "", initialMunicipality = "" }: { initialCategory?: string; initialMunicipality?: string }) {
-  const [workers, setWorkers] = useState<WorkerProfile[]>([]);
   const [category, setCategory] = useState(initialCategory);
   const [municipality, setMunicipality] = useState(initialMunicipality);
   const [verifiedOnly, setVerifiedOnly] = useState(false);
   const [minRating, setMinRating] = useState("0");
   const [maxRate, setMaxRate] = useState("60000");
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState("");
+  const workerProfiles = useCollection<CollectionWorkerProfile>("workerProfiles");
+  const loading = workerProfiles.loading;
+  const error = workerProfiles.error
+    ? "No pudimos leer Firestore. Mostramos perfiles de ejemplo mientras revisas la conexión."
+    : "";
+  const usingFallback = !loading && (Boolean(workerProfiles.error) || workerProfiles.data.length === 0);
+  const workers = useMemo(() => {
+    if (workerProfiles.error || workerProfiles.data.length === 0) return fallbackWorkers;
 
-  useEffect(() => {
-    let cancelled = false;
-
-    async function loadWorkers() {
-      setLoading(true);
-      setError("");
-      try {
-        const firestoreWorkers = await fetchWorkers();
-        if (!cancelled) setWorkers(firestoreWorkers.length ? firestoreWorkers : fallbackWorkers);
-      } catch {
-        if (!cancelled) {
-          setWorkers(fallbackWorkers);
-          setError("No pudimos leer Firestore. Mostramos perfiles de ejemplo mientras revisas la conexión.");
-        }
-      } finally {
-        if (!cancelled) setLoading(false);
-      }
-    }
-
-    loadWorkers();
-    return () => {
-      cancelled = true;
-    };
-  }, []);
+    return workerProfiles.data.map((profile) => mergeWorkerProfile(profile));
+  }, [workerProfiles.data, workerProfiles.error]);
 
   const results = useMemo(() => {
     return workers.filter((worker) => {
@@ -111,15 +137,13 @@ export function SearchDirectory({ initialCategory = "", initialMunicipality = ""
           <div className="mb-4 flex items-center justify-between gap-4">
             <p className="text-sm font-bold text-[#5f5e5a]">{loading ? "Buscando trabajadores..." : `${results.length} trabajadores encontrados`}</p>
             <span className="rounded-lg border border-[#c0c8c4] bg-white px-4 py-2 text-xs font-bold text-[#00261e] shadow-sm">
-              {error ? "Fallback visual" : "Firestore"}
+              {usingFallback ? "Fallback visual" : "Firestore"}
             </span>
           </div>
           {error && <p className="mb-4 rounded-lg bg-[#ffdcc0] px-4 py-3 text-sm font-semibold text-[#542d00]">{error}</p>}
           {loading ? (
             <div className="grid gap-4 xl:grid-cols-2">
-              {[0, 1].map((item) => (
-                <div key={item} className="soft-card h-56 animate-pulse bg-white" />
-              ))}
+              <LoadingSkeleton className="h-56" count={2} />
             </div>
           ) : results.length ? (
             <div className="grid gap-4 xl:grid-cols-2">

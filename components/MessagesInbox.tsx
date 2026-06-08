@@ -1,9 +1,10 @@
 "use client";
 
-import { collection, doc, getDoc, onSnapshot, query, where } from "firebase/firestore";
+import { doc, getDoc } from "firebase/firestore";
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { db } from "@/firebase";
+import { useCollection } from "@/hooks/useCollection";
 import { timestampToText } from "@/lib/firebase-data";
 import type { Conversation } from "@/lib/types";
 import { useAuth } from "./AuthProvider";
@@ -52,62 +53,92 @@ function fallbackAction(role?: string) {
 
 export function MessagesInbox() {
   const { profile } = useAuth();
+  const userId = profile?.uid || "";
+  const {
+    data: conversationDocuments,
+    loading: conversationsLoading,
+    error: conversationsError,
+  } = useCollection<Conversation>(
+    "conversations",
+    [{ field: "participantIds", op: "array-contains", value: userId }],
+    { enabled: Boolean(profile) },
+  );
   const [conversations, setConversations] = useState<ConversationPreview[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState("");
+  const [enriching, setEnriching] = useState(false);
+  const [enrichmentError, setEnrichmentError] = useState("");
 
   useEffect(() => {
-    if (!profile) return;
+    let cancelled = false;
 
-    const unsubscribe = onSnapshot(
-      query(collection(db, "conversations"), where("participantIds", "array-contains", profile.uid)),
-      async (snapshot) => {
-        setLoading(true);
-        setError("");
+    async function enrichConversations() {
+      if (!profile || conversationsLoading || conversationsError) {
+        if (!profile || conversationsError) {
+          setConversations([]);
+          setEnriching(false);
+          setEnrichmentError("");
+        }
+        return;
+      }
 
-        try {
-          const previews = await Promise.all(
-            snapshot.docs.map(async (conversationSnapshot) => {
-              const conversation = { id: conversationSnapshot.id, ...conversationSnapshot.data() } as Conversation;
-              const partnerId = conversation.participantIds.find((id) => id !== profile.uid) || "";
-              let partnerName = "Conversación";
-              let partnerRole = "usuario";
+      if (!conversationDocuments.length) {
+        setConversations([]);
+        setEnriching(false);
+        setEnrichmentError("");
+        return;
+      }
 
-              if (partnerId) {
+      setEnriching(true);
+      setEnrichmentError("");
+
+      try {
+        const previews = await Promise.all(
+          conversationDocuments.map(async (conversation) => {
+            const partnerId = conversation.participantIds.find((id) => id !== profile.uid) || "";
+            let partnerName = "Conversación";
+            let partnerRole = "usuario";
+
+            if (partnerId) {
+              try {
                 const partnerSnapshot = await getDoc(doc(db, "users", partnerId));
                 if (partnerSnapshot.exists()) {
                   const partner = partnerSnapshot.data();
                   partnerName = typeof partner.fullName === "string" ? partner.fullName : partnerName;
                   partnerRole = typeof partner.role === "string" ? partner.role : partnerRole;
                 }
+              } catch {
+                partnerName = "Conversación";
+                partnerRole = "usuario";
               }
+            }
 
-              return {
-                ...conversation,
-                partnerId,
-                partnerName,
-                partnerRole,
-              };
-            }),
-          );
+            return {
+              ...conversation,
+              partnerId,
+              partnerName,
+              partnerRole,
+            };
+          }),
+        );
 
+        if (!cancelled) {
           setConversations(previews.sort((a, b) => updatedAtMillis(b) - updatedAtMillis(a)));
-        } catch {
-          setError("No pudimos preparar la lista de mensajes.");
-        } finally {
-          setLoading(false);
         }
-      },
-      () => {
-        setError("No pudimos leer tus conversaciones en Firestore.");
-        setLoading(false);
-      },
-    );
+      } catch {
+        if (!cancelled) setEnrichmentError("No pudimos preparar la lista de mensajes.");
+      } finally {
+        if (!cancelled) setEnriching(false);
+      }
+    }
 
-    return unsubscribe;
-  }, [profile]);
+    void enrichConversations();
+    return () => {
+      cancelled = true;
+    };
+  }, [conversationDocuments, conversationsError, conversationsLoading, profile]);
 
   const empty = fallbackAction(profile?.role);
+  const loading = conversationsLoading || enriching;
+  const error = conversationsError ? "No pudimos leer tus conversaciones en Firestore." : enrichmentError;
 
   if (loading) {
     return (

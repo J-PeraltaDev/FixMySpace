@@ -1,57 +1,48 @@
 "use client";
 
-import { collection, onSnapshot, query, where } from "firebase/firestore";
 import Link from "next/link";
-import { useEffect, useMemo, useState } from "react";
-import { db } from "@/firebase";
-import { fetchUserBookings, fetchUserRequests } from "@/lib/firebase-data";
+import { useMemo } from "react";
+import { useCollection } from "@/hooks/useCollection";
 import type { Booking, Notification, ServiceRequest } from "@/lib/types";
 import { useAuth } from "./AuthProvider";
 import { BookingCard } from "./BookingCard";
 import { EmptyState } from "./EmptyState";
 import { StatusBadge } from "./StatusBadge";
+import { MetricCard } from "./ui/MetricCard";
 
 export function DashboardView() {
   const { profile } = useAuth();
   const role = profile?.role || "cliente";
-  const [bookings, setBookings] = useState<Booking[]>([]);
-  const [requests, setRequests] = useState<ServiceRequest[]>([]);
-  const [notifications, setNotifications] = useState<Notification[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState("");
-
-  useEffect(() => {
-    let cancelled = false;
-
-    async function loadDashboard() {
-      if (!profile) return;
-      setLoading(true);
-      setError("");
-      try {
-        const [nextBookings, nextRequests] = await Promise.all([fetchUserBookings(profile.uid, profile.role), fetchUserRequests(profile.uid, profile.role)]);
-        if (!cancelled) {
-          setBookings(nextBookings);
-          setRequests(nextRequests);
-        }
-      } catch {
-        if (!cancelled) setError("No pudimos cargar tu panel desde Firestore.");
-      } finally {
-        if (!cancelled) setLoading(false);
-      }
-    }
-
-    loadDashboard();
-    return () => {
-      cancelled = true;
-    };
-  }, [profile]);
-
-  useEffect(() => {
-    if (!profile) return;
-    return onSnapshot(query(collection(db, "notifications"), where("userId", "==", profile.uid)), (snapshot) => {
-      setNotifications(snapshot.docs.map((snapshot) => ({ id: snapshot.id, ...snapshot.data() }) as Notification));
-    });
-  }, [profile]);
+  const userId = profile?.uid || "";
+  const userField = role === "trabajador" ? "workerId" : "clientId";
+  const collectionEnabled = Boolean(profile);
+  const {
+    data: bookings,
+    loading: bookingsLoading,
+    error: bookingsError,
+  } = useCollection<Booking>(
+    "bookings",
+    [{ field: userField, op: "==", value: userId }],
+    { enabled: collectionEnabled },
+  );
+  const {
+    data: requests,
+    loading: requestsLoading,
+    error: requestsError,
+  } = useCollection<ServiceRequest>(
+    "serviceRequests",
+    [{ field: userField, op: "==", value: userId }],
+    { enabled: collectionEnabled },
+  );
+  const {
+    data: notifications,
+    loading: notificationsLoading,
+    error: notificationsError,
+  } = useCollection<Notification>(
+    "notifications",
+    [{ field: "userId", op: "==", value: userId }],
+    { enabled: collectionEnabled },
+  );
 
   const quickActions = useMemo(() => {
     if (role === "admin") {
@@ -116,27 +107,20 @@ export function DashboardView() {
         </aside>
 
         <section className="grid gap-6">
-          {error && <p className="rounded-lg bg-[#ffdad6] px-4 py-3 text-sm font-semibold text-[#93000a]">{error}</p>}
+          {notificationsError && <p className="rounded-lg bg-[#ffdad6] px-4 py-3 text-sm font-semibold text-[#93000a]">No pudimos leer tus notificaciones desde Firestore.</p>}
 
           <div className="grid gap-4 sm:grid-cols-3">
-            <div className="metric-card">
-              <span>Servicios activos</span>
-              <strong>{loading ? "..." : activeServices}</strong>
-            </div>
-            <div className="metric-card">
-              <span>Notificaciones nuevas</span>
-              <strong>{unread}</strong>
-            </div>
-            <div className="metric-card">
-              <span>Solicitudes</span>
-              <strong>{loading ? "..." : requests.length}</strong>
-            </div>
+            <MetricCard label="Servicios activos" value={activeServices} loading={bookingsLoading} />
+            <MetricCard label="Notificaciones nuevas" value={unread} loading={notificationsLoading} />
+            <MetricCard label="Solicitudes" value={requests.length} loading={requestsLoading} />
           </div>
 
           <div className="grid gap-6 xl:grid-cols-[1.1fr_0.9fr]">
             <div className="grid gap-4">
               <h2 className="section-title">Próximos servicios</h2>
-              {loading ? (
+              {bookingsError ? (
+                <p className="rounded-lg bg-[#ffdad6] px-4 py-3 text-sm font-semibold text-[#93000a]">No pudimos cargar tus servicios desde Firestore.</p>
+              ) : bookingsLoading ? (
                 <div className="soft-card h-36 animate-pulse bg-white" />
               ) : bookings.length ? (
                 bookings.map((booking) => <BookingCard key={booking.id} booking={booking} role={profile?.role} />)
@@ -147,7 +131,9 @@ export function DashboardView() {
 
             <div className="grid gap-4">
               <h2 className="section-title">Solicitudes recientes</h2>
-              {loading ? (
+              {requestsError ? (
+                <p className="rounded-lg bg-[#ffdad6] px-4 py-3 text-sm font-semibold text-[#93000a]">No pudimos cargar tus solicitudes desde Firestore.</p>
+              ) : requestsLoading ? (
                 <div className="soft-card h-36 animate-pulse bg-white" />
               ) : requests.length ? (
                 requests.map((request) => {

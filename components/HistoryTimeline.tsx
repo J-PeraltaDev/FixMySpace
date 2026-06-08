@@ -1,78 +1,79 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useState } from "react";
-import { fetchUserBookings, fetchUserHistory, timestampToText } from "@/lib/firebase-data";
+import { useCollection } from "@/hooks/useCollection";
+import { timestampToText } from "@/lib/firebase-data";
 import type { Booking, JobHistory } from "@/lib/types";
 import { useAuth } from "./AuthProvider";
 import { EmptyState } from "./EmptyState";
 import { EvidenceManager } from "./EvidenceManager";
 import { StatusBadge } from "./StatusBadge";
+import { LoadingSkeleton } from "./ui/LoadingSkeleton";
 
 export function HistoryTimeline({ focusBookingId = "" }: { focusBookingId?: string }) {
   const { profile } = useAuth();
-  const [history, setHistory] = useState<JobHistory[]>([]);
-  const [bookings, setBookings] = useState<Booking[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState("");
+  const userId = profile?.uid || "";
+  const userField = profile?.role === "trabajador" ? "workerId" : "clientId";
+  const collectionEnabled = Boolean(profile);
+  const {
+    data: history,
+    loading: historyLoading,
+    error: historyError,
+  } = useCollection<JobHistory>(
+    "jobHistory",
+    [{ field: "userId", op: "==", value: userId }],
+    { enabled: collectionEnabled },
+  );
+  const {
+    data: bookings,
+    loading: bookingsLoading,
+    error: bookingsError,
+  } = useCollection<Booking>(
+    "bookings",
+    [{ field: userField, op: "==", value: userId }],
+    { enabled: collectionEnabled },
+  );
 
-  useEffect(() => {
-    let cancelled = false;
-
-    async function loadHistory() {
-      if (!profile) return;
-      setLoading(true);
-      setError("");
-      try {
-        const [nextHistory, nextBookings] = await Promise.all([fetchUserHistory(profile.uid), fetchUserBookings(profile.uid, profile.role)]);
-        if (!cancelled) {
-          setHistory(nextHistory);
-          setBookings(nextBookings);
-        }
-      } catch {
-        if (!cancelled) setError("No pudimos cargar tu historial desde Firestore.");
-      } finally {
-        if (!cancelled) setLoading(false);
-      }
-    }
-
-    loadHistory();
-    return () => {
-      cancelled = true;
-    };
-  }, [profile]);
-
-  if (loading) {
+  if (historyLoading) {
     return (
       <div className="grid gap-4">
-        {[0, 1].map((item) => (
-          <div key={item} className="soft-card h-44 animate-pulse bg-white" />
-        ))}
+        <LoadingSkeleton className="h-44" count={2} />
       </div>
     );
   }
 
-  if (error) {
-    return <p className="rounded-2xl bg-rose-50 px-4 py-3 text-sm font-semibold text-rose-700">{error}</p>;
+  if (historyError) {
+    return <p className="rounded-2xl bg-rose-50 px-4 py-3 text-sm font-semibold text-rose-700">No pudimos cargar tu historial desde Firestore.</p>;
   }
 
-  const rows = history.length
-    ? history
-    : bookings.map(
-        (booking) =>
-          ({
-            id: booking.id,
-            bookingId: booking.id,
-            userId: profile?.uid || "",
-            service: booking.notes || "Servicio agendado",
-            status: booking.status,
-            workerId: booking.workerId,
-            clientId: booking.clientId,
-            events: [booking.notes || "Servicio registrado"],
-            createdAt: booking.createdAt,
-            updatedAt: booking.updatedAt || booking.createdAt,
-          }) satisfies JobHistory,
-      );
+  if (!history.length && bookingsLoading) {
+    return (
+      <div className="grid gap-4">
+        <LoadingSkeleton className="h-44" count={2} />
+      </div>
+    );
+  }
+
+  if (!history.length && bookingsError) {
+    return <p className="rounded-2xl bg-rose-50 px-4 py-3 text-sm font-semibold text-rose-700">No pudimos cargar tu historial desde Firestore.</p>;
+  }
+
+  const fallbackRows = bookings.map(
+    (booking) =>
+      ({
+        id: booking.id,
+        bookingId: booking.id,
+        userId: profile?.uid || "",
+        service: booking.notes || "Servicio agendado",
+        status: booking.status,
+        workerId: booking.workerId,
+        clientId: booking.clientId,
+        events: [booking.notes || "Servicio registrado"],
+        createdAt: booking.createdAt,
+        updatedAt: booking.updatedAt || booking.createdAt,
+      }) satisfies JobHistory,
+  );
+  const rows = history.length ? history : fallbackRows;
 
   const visibleRows = focusBookingId ? rows.filter((item) => item.bookingId === focusBookingId) : rows;
 

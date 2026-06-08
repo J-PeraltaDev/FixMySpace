@@ -6,12 +6,12 @@ import { getStorage } from "firebase/storage";
 
 // Your web app's Firebase configuration
 const firebaseConfig = {
-    apiKey: "AIzaSyCNmxDPPDyTJN4UxrQ28fzvsIG-QR8ZY88",
-    authDomain: "fixmyspace-a6a0f.firebaseapp.com",
-    projectId: "fixmyspace-a6a0f",
-    storageBucket: "fixmyspace-a6a0f.firebasestorage.app",
-    messagingSenderId: "215565790436",
-    appId: "1:215565790436:web:50cf0380772563ec1d10f1"
+    apiKey: process.env.NEXT_PUBLIC_FIREBASE_API_KEY || "AIzaSyCNmxDPPDyTJN4UxrQ28fzvsIG-QR8ZY88",
+    authDomain: process.env.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN || "fixmyspace-a6a0f.firebaseapp.com",
+    projectId: process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID || "fixmyspace-a6a0f",
+    storageBucket: process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET || "fixmyspace-a6a0f.firebasestorage.app",
+    messagingSenderId: process.env.NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID || "215565790436",
+    appId: process.env.NEXT_PUBLIC_FIREBASE_APP_ID || "1:215565790436:web:50cf0380772563ec1d10f1"
 };
 
 // Initialize Firebase
