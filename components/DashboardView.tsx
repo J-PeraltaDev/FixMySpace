@@ -44,34 +44,6 @@ export function DashboardView() {
     { enabled: collectionEnabled },
   );
 
-  const quickActions = useMemo(() => {
-    if (role === "admin") {
-      return [
-        { href: "/admin", label: "Panel administrativo" },
-        { href: "/verificacion", label: "Verificación" },
-        { href: "/mensajes", label: "Mensajes" },
-        { href: "/notificaciones", label: "Notificaciones" },
-      ];
-    }
-
-    if (role === "trabajador") {
-      return [
-        { href: "/dashboard", label: "Solicitudes y bookings" },
-        { href: "/mensajes", label: "Mensajes" },
-        { href: "/perfil", label: "Editar perfil profesional" },
-        { href: "/verificacion", label: "Estado de verificación" },
-        { href: "/historial", label: "Ver historial" },
-      ];
-    }
-
-    return [
-      { href: "/buscar", label: "Buscar trabajadores" },
-      { href: "/solicitudes/nueva", label: "Crear solicitud" },
-      { href: "/mensajes", label: "Mensajes" },
-      { href: "/historial", label: "Ver historial" },
-    ];
-  }, [role]);
-
   const unread = notifications.filter((item) => !item.read).length;
   const activeServices = bookings.filter((booking) => !["completed", "cancelled"].includes(booking.status)).length;
 
@@ -84,9 +56,8 @@ export function DashboardView() {
     <div className="page-shell">
       <div className="mb-8 flex flex-col justify-between gap-4 sm:flex-row sm:items-end">
         <div>
-          <p className="eyebrow">Panel {role}</p>
           <h1 className="mt-3 text-4xl font-bold text-[#191c1b]">
-            {profile ? `Hola, ${profile.fullName.split(" ")[0]}` : "Gestiona tu actividad en FixMySpace"}
+            {profile ? `Panel ${role}` : "Gestiona tu actividad en FixMySpace"}
           </h1>
           <p className="mt-3 max-w-2xl text-[#414845]">Resumen de servicios, agenda, mensajes y notificaciones internas.</p>
         </div>
@@ -95,16 +66,7 @@ export function DashboardView() {
         </Link>
       </div>
 
-      <div className="grid gap-6 lg:grid-cols-[240px_1fr]">
-        <aside className="soft-card h-fit p-4 lg:sticky lg:top-24">
-          <nav className="grid gap-2">
-            {quickActions.map((action) => (
-              <Link key={action.href} href={action.href} className="rounded-lg px-4 py-3 text-sm font-bold text-[#414845] transition hover:bg-[#eceeec] hover:text-[#00261e]">
-                {action.label}
-              </Link>
-            ))}
-          </nav>
-        </aside>
+      <div className="grid gap-6 ">
 
         <section className="grid gap-6">
           {notificationsError && <p className="rounded-lg bg-[#ffdad6] px-4 py-3 text-sm font-semibold text-[#93000a]">No pudimos leer tus notificaciones desde Firestore.</p>}

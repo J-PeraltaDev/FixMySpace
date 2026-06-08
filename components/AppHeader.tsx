@@ -34,8 +34,13 @@ export function AppHeader() {
             FM
           </span>
           <span className="flex flex-col leading-tight">
-            <span className="text-lg font-bold text-[#00261e]">FixMySpace</span>
-            <span className="hidden text-xs font-semibold text-[#5f5e5a] sm:inline">Urabá Antioqueño</span>
+            <span className="text-lg font-bold text-[#00261e]">
+              {profile ? profile.fullName : "FixMySpace"}
+            </span>
+
+            <span className="hidden text-xs font-semibold capitalize text-[#5f5e5a] sm:inline">
+              {profile ? profile.role : "Urabá Antioqueño"}
+            </span>
           </span>
         </Link>
 
@@ -46,9 +51,8 @@ export function AppHeader() {
               <Link
                 key={item.href}
                 href={item.href}
-                className={`rounded-full px-4 py-2 text-sm font-semibold transition ${
-                  isActive ? "bg-[#00261e] text-white" : "text-[#414845] hover:bg-[#eceeec] hover:text-[#00261e]"
-                }`}
+                className={`rounded-full px-4 py-2 text-sm font-semibold transition ${isActive ? "bg-[#00261e] text-white" : "text-[#414845] hover:bg-[#eceeec] hover:text-[#00261e]"
+                  }`}
               >
                 {item.label}
               </Link>
@@ -83,10 +87,6 @@ export function AppHeader() {
             <span className="h-10 w-24 animate-pulse rounded-lg bg-[#eceeec]" />
           ) : profile ? (
             <div className="flex items-center gap-2">
-              <Link href="/perfil" className="hidden text-right text-sm sm:block">
-                <span className="block font-bold text-[#191c1b]">{profile.fullName}</span>
-                <span className="block text-xs capitalize text-[#5f5e5a]">{profile.role}</span>
-              </Link>
               <button className="secondary-button hidden sm:inline-flex" onClick={logout}>
                 Salir
               </button>
