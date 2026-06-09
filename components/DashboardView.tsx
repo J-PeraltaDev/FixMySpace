@@ -77,7 +77,7 @@ export function DashboardView() {
             <MetricCard label="Solicitudes" value={requests.length} loading={requestsLoading} />
           </div>
 
-          <div className="grid gap-6 xl:grid-cols-[1.1fr_0.9fr]">
+          <div className="grid items-start gap-6 xl:grid-cols-[1.1fr_0.9fr]">
             <div className="grid gap-4">
               <h2 className="section-title">Próximos servicios</h2>
               {bookingsError ? (

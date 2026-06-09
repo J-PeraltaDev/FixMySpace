@@ -35,10 +35,13 @@ export function ServiceRequestForm({ workerId }: { workerId?: string }) {
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+
+    const form = event.currentTarget;
+
     setStatus("");
     setError("");
 
-    const data = new FormData(event.currentTarget);
+    const data = new FormData(form);
     if (!profile) {
       setError("Inicia sesión para guardar la solicitud en Firestore.");
       return;
@@ -127,9 +130,10 @@ export function ServiceRequestForm({ workerId }: { workerId?: string }) {
       });
 
       setStatus("Solicitud publicada. Fotos, solicitud y agenda quedaron guardadas en Firebase.");
-      event.currentTarget.reset();
+      form.reset();
       setFiles([]);
-    } catch {
+    } catch (err) {
+      console.log("ERROR:", err);
       setError("No pudimos guardar en Firestore. Revisa la configuración o intenta más tarde.");
     } finally {
       setLoading(false);
