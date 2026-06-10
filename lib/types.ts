@@ -139,6 +139,16 @@ export type Notification = {
   createdAt?: unknown;
 };
 
+export type JobApplication = {
+  id: string;
+  requestId: string;
+  workerId: string;
+  clientId: string;
+  message?: string;
+  status: "pending" | "accepted" | "rejected";
+  createdAt?: unknown;
+};
+
 export type SupportReport = {
   id: string;
   userId: string;

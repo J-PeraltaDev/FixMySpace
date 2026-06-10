@@ -18,6 +18,7 @@ import { auth, db, storage } from "@/firebase";
 import { normalizeWorkerProfile } from "./worker-profile";
 import type {
   Booking,
+  JobApplication,
   JobEvidence,
   JobHistory,
   Notification,
@@ -310,4 +311,101 @@ export async function acceptRequestProposal(
   });
 
   await batch.commit();
+}
+
+// ─── Bolsa de trabajos ────────────────────────────────────────────────────────
+
+export async function fetchOpenServiceRequests(filters?: {
+  category?: string;
+  municipality?: string;
+}) {
+  let q = query(
+    collection(db, "serviceRequests"),
+    where("workerId", "==", ""),
+    where("status", "==", "pending"),
+  );
+  const snapshots = await getDocs(q);
+  let results = snapshots.docs.map((snapshot) => dataWithId<ServiceRequest>(snapshot));
+
+  // Filtros opcionales en cliente porque Firestore no permite
+  // múltiples where de desigualdad en campos distintos sin índice compuesto
+  if (filters?.category) {
+    results = results.filter((r) => r.category === filters.category);
+  }
+  if (filters?.municipality) {
+    results = results.filter((r) => r.municipality === filters.municipality);
+  }
+
+  return results;
+}
+
+export async function createJobApplication(input: {
+  requestId: string;
+  clientId: string;
+  message?: string;
+}) {
+  const workerId = auth.currentUser?.uid;
+  if (!workerId) throw new Error("Se requiere una sesión activa.");
+
+  // Verificar que no se haya postulado ya
+  const existing = await getDocs(
+    query(
+      collection(db, "jobApplications"),
+      where("requestId", "==", input.requestId),
+      where("workerId", "==", workerId),
+    ),
+  );
+  if (!existing.empty) throw new Error("Ya te postulaste a esta solicitud.");
+
+  await addDoc(collection(db, "jobApplications"), {
+    requestId: input.requestId,
+    workerId,
+    clientId: input.clientId,
+    message: input.message ?? "",
+    status: "pending",
+    createdAt: serverTimestamp(),
+  });
+}
+
+export async function acceptJobApplication(
+  application: JobApplication,
+  allApplications: JobApplication[],
+) {
+  const batch = writeBatch(db);
+
+  // 1. Marcar la postulación ganadora como aceptada
+  batch.update(doc(db, "jobApplications", application.id), {
+    status: "accepted",
+  });
+
+  // 2. Asignar el trabajador en la solicitud
+  batch.update(doc(db, "serviceRequests", application.requestId), {
+    workerId: application.workerId,
+    updatedAt: serverTimestamp(),
+  });
+
+  // 3. Rechazar el resto de postulaciones
+  for (const other of allApplications) {
+    if (other.id !== application.id) {
+      batch.update(doc(db, "jobApplications", other.id), {
+        status: "rejected",
+      });
+    }
+  }
+
+  await batch.commit();
+}
+
+export async function fetchApplicationsByRequest(requestId: string) {
+  const snapshots = await getDocs(
+    query(collection(db, "jobApplications"), where("requestId", "==", requestId)),
+  );
+  return snapshots.docs.map((snapshot) => dataWithId<JobApplication>(snapshot));
+}
+
+export async function fetchApplicationsByWorker(workerId: string) {
+  const snapshots = await getDocs(
+    query(collection(db, "jobApplications"), where("workerId", "==", workerId)),
+  );
+  return snapshots.docs.map((snapshot) => dataWithId<JobApplication>(snapshot));
 }

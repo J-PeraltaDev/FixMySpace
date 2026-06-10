@@ -171,21 +171,45 @@ service cloud.firestore {
     }
 
     match /serviceRequests/{requestId} {
-      allow read: if isAdmin() || (signedIn()
-        && (resource.data.clientId == request.auth.uid || resource.data.workerId == request.auth.uid)
-      );
-      allow create: if signedIn()
-        && request.resource.data.clientId == request.auth.uid
-        && request.resource.data.status in ["pending", "scheduled"];
-      allow update: if isAdmin() || (
-        signedIn()
-        && (resource.data.clientId == request.auth.uid || resource.data.workerId == request.auth.uid)
-        && request.resource.data.clientId == resource.data.clientId
-        && request.resource.data.workerId == resource.data.workerId
-        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(["status", "updatedAt"])
-      );
-      allow delete: if signedIn() && resource.data.clientId == request.auth.uid;
-    }
+  allow read: if isAdmin()
+    || (signedIn() && (
+      resource.data.clientId == request.auth.uid
+      || resource.data.workerId == request.auth.uid
+      || (resource.data.workerId == "" && resource.data.status == "pending")
+    ));
+  allow create: if signedIn()
+    && request.resource.data.clientId == request.auth.uid
+    && request.resource.data.status in ["pending", "scheduled"];
+  allow update: if isAdmin() || (
+    signedIn()
+    && (resource.data.clientId == request.auth.uid || resource.data.workerId == request.auth.uid)
+    && request.resource.data.clientId == resource.data.clientId
+    && request.resource.data.diff(resource.data).affectedKeys().hasOnly(["status", "workerId", "updatedAt", "proposedPrice", "proposedDate", "proposedTime", "lastProposalBy", "price", "preferredDate", "preferredTime"])
+  );
+  allow delete: if signedIn() && resource.data.clientId == request.auth.uid;
+}
+
+  match /jobApplications/{applicationId} {
+  allow read: if isAdmin()
+    || (signedIn() && (
+      resource.data.workerId == request.auth.uid
+      || resource.data.clientId == request.auth.uid
+    ));
+  allow create: if signedIn()
+    && request.resource.data.workerId == request.auth.uid
+    && request.resource.data.status == "pending"
+    && request.resource.data.keys().hasOnly([
+        "requestId", "workerId", "clientId", "message", "status", "createdAt"
+    ])
+    && exists(/databases/$(database)/documents/serviceRequests/$(request.resource.data.requestId));
+  allow update: if isAdmin()
+    || (signedIn()
+      && resource.data.clientId == request.auth.uid
+      && request.resource.data.diff(resource.data).affectedKeys().hasOnly(["status"])
+      && request.resource.data.status in ["accepted", "rejected"]
+    );
+  allow delete: if false;
+  }
 
     match /bookings/{bookingId} {
       allow read: if isAdmin() || (signedIn()

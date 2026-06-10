@@ -59,6 +59,7 @@ export function DashboardView() {
     if (role === "trabajador") {
       return [
         { href: "/dashboard", label: "Inicio" },
+        { href: "/trabajos", label: "Bolsa de trabajos" },
         { href: "/mensajes", label: "Mensajes" },
         { href: "/perfil", label: "Mi perfil" },
         { href: "/verificacion", label: "Verificación" },
@@ -142,8 +143,10 @@ export function DashboardView() {
                 <div className="soft-card h-36 animate-pulse bg-white" />
               ) : requests.length ? (
                 requests.map((request) => {
-                  const assignedWorkerHref = request.workerId ? `/chat/${request.workerId}` : `/buscar?oficio=${encodeURIComponent(request.category)}&municipio=${encodeURIComponent(request.municipality)}`;
-                  const assignedWorkerLabel = request.workerId ? "Mensaje al trabajador" : "Buscar trabajador";
+                  const assignedWorkerHref = request.workerId
+                    ? `/chat/${request.workerId}`
+                    : `/solicitudes/${request.id}`;
+                  const assignedWorkerLabel = request.workerId ? "Mensaje al trabajador" : "Ver postulantes";
                   const workerClientHref = request.clientId ? `/chat/${request.clientId}` : "";
 
                   return (
