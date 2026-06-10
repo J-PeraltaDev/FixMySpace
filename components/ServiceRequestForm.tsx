@@ -1,30 +1,80 @@
 "use client";
 
-import { addDoc, collection, doc, serverTimestamp, setDoc } from "firebase/firestore";
-import { FormEvent, useEffect, useState } from "react";
-import { db } from "@/firebase";
+import { collection, doc, serverTimestamp, writeBatch } from "firebase/firestore";
+import { deleteObject, ref as storageRef } from "firebase/storage";
+import { useEffect, useRef, useState } from "react";
+import { zodResolver } from "@hookform/resolvers/zod";
+import { useForm } from "react-hook-form";
+import { db, storage } from "@/firebase";
 import { createNotification, fetchWorkerById, uploadImage } from "@/lib/firebase-data";
-import { municipalities, serviceCategories, workers } from "@/lib/mock-data";
+import { municipalities, serviceCategories } from "@/lib/catalog";
 import type { WorkerProfile } from "@/lib/types";
+import { serviceRequestSchema, type ServiceRequestFormValues } from "@/lib/validation/service-request";
 import { useAuth } from "./AuthProvider";
+import { Field } from "./ui/Field";
+
+const MAX_FILES = 5;
+const MAX_FILE_SIZE = 5 * 1024 * 1024;
+
+function validateFiles(files: File[]) {
+  if (files.length > MAX_FILES) return "Puedes adjuntar máximo 5 imágenes.";
+  if (files.some((file) => !file.type.startsWith("image/"))) return "Solo puedes adjuntar archivos de imagen.";
+  if (files.some((file) => file.size > MAX_FILE_SIZE)) return "Cada imagen debe pesar máximo 5 MB.";
+  return "";
+}
+
+function workerCategory(worker?: WorkerProfile) {
+  return worker?.specialties.find((specialty) => serviceCategories.includes(specialty)) || "";
+}
 
 export function ServiceRequestForm({ workerId }: { workerId?: string }) {
   const { profile } = useAuth();
-  const [selectedWorker, setSelectedWorker] = useState<WorkerProfile | undefined>(() => workers.find((worker) => worker.uid === workerId));
+  const [selectedWorker, setSelectedWorker] = useState<WorkerProfile | undefined>();
+  const [workerResolving, setWorkerResolving] = useState(Boolean(workerId));
   const [files, setFiles] = useState<File[]>([]);
   const [status, setStatus] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const {
+    formState: { errors, isValid },
+    getFieldState,
+    getValues,
+    handleSubmit,
+    register,
+    reset,
+    setValue,
+  } = useForm<ServiceRequestFormValues>({
+    resolver: zodResolver(serviceRequestSchema),
+    mode: "onChange",
+    defaultValues: {
+      title: "",
+      description: "",
+      category: workerCategory(selectedWorker),
+      municipality: profile?.municipality || "",
+      address: "",
+      preferredDate: "",
+      preferredTime: "",
+      price: undefined,
+    },
+  });
 
   useEffect(() => {
     let cancelled = false;
     async function loadWorker() {
-      if (!workerId) return;
+      setSelectedWorker(undefined);
+      if (!workerId) {
+        setWorkerResolving(false);
+        return;
+      }
+      setWorkerResolving(true);
       try {
         const worker = await fetchWorkerById(workerId);
-        if (!cancelled && worker) setSelectedWorker(worker);
+        if (!cancelled) setSelectedWorker(worker || undefined);
       } catch {
-        if (!cancelled) setSelectedWorker(workers.find((worker) => worker.uid === workerId));
+        if (!cancelled) setError("No pudimos leer el trabajador seleccionado desde Firestore.");
+      } finally {
+        if (!cancelled) setWorkerResolving(false);
       }
     }
     loadWorker();
@@ -33,15 +83,28 @@ export function ServiceRequestForm({ workerId }: { workerId?: string }) {
     };
   }, [workerId]);
 
-  async function submit(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
+  useEffect(() => {
+    const category = workerCategory(selectedWorker);
+    if (!getFieldState("category").isDirty && getValues("category") !== category) {
+      setValue("category", category, { shouldValidate: true });
+    }
+  }, [getFieldState, getValues, selectedWorker, setValue]);
 
-    const form = event.currentTarget;
+  useEffect(() => {
+    const municipality = profile?.municipality || "";
+    if (!getFieldState("municipality").isDirty && getValues("municipality") !== municipality) {
+      setValue("municipality", municipality, { shouldValidate: true });
+    }
+  }, [getFieldState, getValues, profile?.municipality, setValue]);
 
+  useEffect(() => {
+    if (!files.length && fileInputRef.current) fileInputRef.current.value = "";
+  }, [files]);
+
+  async function submit(values: ServiceRequestFormValues) {
     setStatus("");
     setError("");
 
-    const data = new FormData(form);
     if (!profile) {
       setError("Inicia sesión para guardar la solicitud en Firestore.");
       return;
@@ -50,90 +113,85 @@ export function ServiceRequestForm({ workerId }: { workerId?: string }) {
     const clientId = profile.uid;
     const payload = {
       clientId,
-      title: String(data.get("title") || "").trim(),
-      description: String(data.get("description") || "").trim(),
-      category: String(data.get("category") || ""),
-      municipality: String(data.get("municipality") || ""),
-      address: String(data.get("address") || "").trim(),
-      preferredDate: String(data.get("preferredDate") || ""),
-      preferredTime: String(data.get("preferredTime") || ""),
+      ...values,
       photos: [] as string[],
       status: "pending",
+      lastProposalBy: clientId,
       createdAt: serverTimestamp(),
       workerId: selectedWorker?.uid || "",
     };
 
-    if (!payload.title || !payload.description || !payload.category || !payload.municipality || !payload.address || !payload.preferredDate || !payload.preferredTime) {
-      setError("Completa título, descripción, ubicación, fecha y hora para publicar la solicitud.");
-      return;
-    }
+    const uploadedUrls: string[] = [];
+    let coreCommitted = false;
 
     try {
       setLoading(true);
-      const photos = await Promise.all(files.map((file) => uploadImage(file, `serviceRequests/${clientId}`)));
-      const requestRef = await addDoc(collection(db, "serviceRequests"), { ...payload, photos });
+      const fileError = validateFiles(files);
+      if (fileError) {
+        setError(fileError);
+        return;
+      }
+      for (const file of files) {
+        const url = await uploadImage(file, `serviceRequests/${clientId}`);
+        uploadedUrls.push(url);
+      }
+      const photos = uploadedUrls;
+      const requestRef = doc(collection(db, "serviceRequests"));
+      const batch = writeBatch(db);
+      batch.set(requestRef, { ...payload, photos });
+
+      await batch.commit();
+      coreCommitted = true;
+
+      const notificationTasks = [
+        Promise.resolve().then(() => createNotification({
+          userId: clientId,
+          type: "serviceRequest",
+          title: "Solicitud enviada",
+          message: selectedWorker ? "Tu solicitud fue enviada al trabajador para su revisión." : "Tu solicitud quedó guardada para revisión general.",
+          relatedEntityId: requestRef.id,
+          relatedEntityType: "serviceRequest",
+        })),
+      ];
 
       if (selectedWorker) {
-        const scheduledAt = `${payload.preferredDate} ${payload.preferredTime}`;
-        const bookingRef = await addDoc(collection(db, "bookings"), {
-          requestId: requestRef.id,
-          clientId,
-          workerId: selectedWorker.uid,
-          scheduledAt,
-          status: "scheduled",
-          notes: payload.description,
-          createdAt: serverTimestamp(),
-          updatedAt: serverTimestamp(),
-        });
-
-        await Promise.all([
-          setDoc(doc(db, "jobHistory", `${bookingRef.id}_${clientId}`), {
-            bookingId: bookingRef.id,
-            userId: clientId,
-            clientId,
-            workerId: selectedWorker.uid,
-            service: payload.title,
-            status: "scheduled",
-            events: ["Solicitud creada", "Servicio agendado"],
-            createdAt: serverTimestamp(),
-            updatedAt: serverTimestamp(),
-          }),
-          setDoc(doc(db, "jobHistory", `${bookingRef.id}_${selectedWorker.uid}`), {
-            bookingId: bookingRef.id,
+        notificationTasks.push(
+          Promise.resolve().then(() => createNotification({
             userId: selectedWorker.uid,
-            clientId,
-            workerId: selectedWorker.uid,
-            service: payload.title,
-            status: "scheduled",
-            events: ["Nueva reserva asignada"],
-            createdAt: serverTimestamp(),
-            updatedAt: serverTimestamp(),
-          }),
-          createNotification({
-            userId: selectedWorker.uid,
-            type: "booking",
-            title: "Nueva solicitud asignada",
-            message: `${profile.fullName} agendó ${payload.title}.`,
-            relatedEntityId: bookingRef.id,
-            relatedEntityType: "booking",
-          }),
-        ]);
+            type: "serviceRequest",
+            title: "Nueva solicitud de servicio",
+            message: `${profile.fullName} te envió una solicitud. Revisa el chat para negociar o aceptar.`,
+            relatedEntityId: requestRef.id,
+            relatedEntityType: "serviceRequest",
+          })),
+        );
       }
 
-      await createNotification({
-        userId: clientId,
-        type: "serviceRequest",
-        title: "Solicitud publicada",
-        message: selectedWorker ? "Tu solicitud quedó agendada con el trabajador seleccionado." : "Tu solicitud quedó guardada para revisión.",
-        relatedEntityId: requestRef.id,
-        relatedEntityType: "serviceRequest",
+      const notificationResults = await Promise.allSettled(notificationTasks);
+      const notificationWarning = notificationResults.some((result) => result.status === "rejected")
+        ? " No pudimos enviar todas las notificaciones."
+        : "";
+      const photoMessage = photos.length
+        ? ` Se ${photos.length === 1 ? "subió 1 imagen" : `subieron ${photos.length} imágenes`}.`
+        : "";
+      setStatus(`Solicitud enviada exitosamente.${photoMessage}${notificationWarning}`);
+      reset({
+        title: "",
+        description: "",
+        category: workerCategory(selectedWorker),
+        municipality: profile.municipality || "",
+        address: "",
+        preferredDate: "",
+        preferredTime: "",
+        price: undefined,
       });
-
-      setStatus("Solicitud publicada. Fotos, solicitud y agenda quedaron guardadas en Firebase.");
-      form.reset();
       setFiles([]);
-    } catch (err) {
-      console.log("ERROR:", err);
+    } catch {
+      if (!coreCommitted && uploadedUrls.length) {
+        await Promise.allSettled(
+          uploadedUrls.filter(Boolean).map((url) => deleteObject(storageRef(storage, url))),
+        );
+      }
       setError("No pudimos guardar en Firestore. Revisa la configuración o intenta más tarde.");
     } finally {
       setLoading(false);
@@ -148,22 +206,19 @@ export function ServiceRequestForm({ workerId }: { workerId?: string }) {
         <p className="mt-3 text-slate-600">Las fotos son opcionales en esta primera versión y ayudan a que el trabajador llegue mejor preparado.</p>
       </div>
 
-      <form onSubmit={submit} className="grid gap-6 lg:grid-cols-[1fr_360px]">
+      <form onSubmit={handleSubmit(submit)} className="grid gap-6 lg:grid-cols-[1fr_360px]">
         <section className="grid gap-5">
           <div className="soft-card grid gap-4 p-5 sm:p-6">
             <h2 className="section-title">Detalle del trabajo</h2>
-            <label className="field">
-              <span>Título</span>
-              <input name="title" placeholder="Ej. Reparar fuga bajo lavaplatos" />
-            </label>
-            <label className="field">
-              <span>Descripción</span>
-              <textarea name="description" rows={5} placeholder="Cuenta qué ocurre, desde cuándo y qué esperas resolver." />
-            </label>
+            <Field label="Título" error={errors.title?.message}>
+              <input {...register("title")} placeholder="Ej. Reparar fuga bajo lavaplatos" />
+            </Field>
+            <Field label="Descripción" error={errors.description?.message}>
+              <textarea {...register("description")} rows={5} placeholder="Cuenta qué ocurre, desde cuándo y qué esperas resolver." />
+            </Field>
             <div className="grid gap-4 sm:grid-cols-2">
-              <label className="field">
-                <span>Categoría</span>
-                <select name="category" defaultValue={selectedWorker?.specialties[0] || ""}>
+              <Field label="Categoría" error={errors.category?.message}>
+                <select {...register("category")}>
                   <option value="" disabled>
                     Selecciona una categoría
                   </option>
@@ -173,10 +228,9 @@ export function ServiceRequestForm({ workerId }: { workerId?: string }) {
                     </option>
                   ))}
                 </select>
-              </label>
-              <label className="field">
-                <span>Municipio</span>
-                <select name="municipality" defaultValue={profile?.municipality || ""}>
+              </Field>
+              <Field label="Municipio" error={errors.municipality?.message}>
+                <select {...register("municipality")}>
                   <option value="" disabled>
                     Selecciona municipio
                   </option>
@@ -185,27 +239,30 @@ export function ServiceRequestForm({ workerId }: { workerId?: string }) {
                       {municipality}
                     </option>
                   ))}
-                </select>
-              </label>
+                 </select>
+              </Field>
             </div>
-            <label className="field">
-              <span>Dirección o referencia</span>
-              <input name="address" placeholder="Conjunto, barrio o punto de referencia" />
-            </label>
+            <Field label="Dirección o referencia" error={errors.address?.message}>
+              <input {...register("address")} placeholder="Conjunto, barrio o punto de referencia" />
+            </Field>
           </div>
 
           <div className="soft-card grid gap-4 p-5 sm:p-6">
-            <h2 className="section-title">Agenda preferida</h2>
+            <h2 className="section-title">Agenda y Oferta</h2>
             <div className="grid gap-4 sm:grid-cols-2">
-              <label className="field">
-                <span>Fecha</span>
-                <input name="preferredDate" type="date" />
-              </label>
-              <label className="field">
-                <span>Hora</span>
-                <input name="preferredTime" type="time" />
-              </label>
+              <Field label="Fecha preferida" error={errors.preferredDate?.message}>
+                <input {...register("preferredDate")} type="date" />
+              </Field>
+              <Field label="Hora preferida" error={errors.preferredTime?.message}>
+                <input {...register("preferredTime")} type="time" />
+              </Field>
             </div>
+            <Field label="Precio propuesto (opcional)" error={errors.price?.message}>
+              <div className="relative">
+                <span className="absolute inset-y-0 left-0 flex items-center pl-3 text-[#5f5e5a]">$</span>
+                <input {...register("price")} type="number" min="0" step="1000" className="pl-8" placeholder="Ej. 50000" />
+              </div>
+            </Field>
           </div>
 
           <div className="soft-card grid gap-4 p-5 sm:p-6">
@@ -214,11 +271,19 @@ export function ServiceRequestForm({ workerId }: { workerId?: string }) {
               <span className="block font-bold text-[#00261e]">Adjuntar fotos</span>
               <span className="mt-1 block text-sm text-[#414845]">Puedes seleccionar varias imágenes como referencia.</span>
               <input
+                ref={fileInputRef}
                 className="sr-only"
                 type="file"
                 accept="image/*"
                 multiple
-                onChange={(event) => setFiles(Array.from(event.target.files || []))}
+                onChange={(event) => {
+                  const selectedFiles = Array.from(event.target.files || []);
+                  const fileError = validateFiles(selectedFiles);
+                  setStatus("");
+                  setError(fileError);
+                  setFiles(fileError ? [] : selectedFiles);
+                  if (fileError) event.currentTarget.value = "";
+                }}
               />
             </label>
             {files.length > 0 && (
@@ -242,10 +307,12 @@ export function ServiceRequestForm({ workerId }: { workerId?: string }) {
           ) : (
             <p className="mt-3 rounded-lg bg-[#f2f4f2] p-4 text-sm text-[#414845]">Publica la solicitud para recibir respuestas de trabajadores disponibles.</p>
           )}
-          {(error || status) && (
-            <p className={`mt-4 rounded-lg px-4 py-3 text-sm font-semibold ${error ? "bg-[#ffdad6] text-[#93000a]" : "bg-[#bfecdd] text-[#00261e]"}`}>{error || status}</p>
-          )}
-          <button type="submit" className="primary-button mt-5 min-h-12 w-full" disabled={loading}>
+          {error ? (
+            <p className="mt-4 rounded-lg bg-[#ffdad6] px-4 py-3 text-sm font-semibold text-[#93000a]" role="alert">{error}</p>
+          ) : status ? (
+            <p className="mt-4 rounded-lg bg-[#bfecdd] px-4 py-3 text-sm font-semibold text-[#00261e]" role="status" aria-live="polite">{status}</p>
+          ) : null}
+          <button type="submit" className="primary-button mt-5 min-h-12 w-full" disabled={loading || workerResolving || !isValid}>
             {loading ? "Publicando..." : "Publicar solicitud"}
           </button>
         </aside>

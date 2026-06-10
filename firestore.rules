@@ -1,0 +1,296 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function signedIn() {
+      return request.auth != null;
+    }
+
+    function isOwner(uid) {
+      return signedIn() && request.auth.uid == uid;
+    }
+
+    function isAdmin() {
+      return signedIn()
+        && exists(/databases/$(database)/documents/roles/$(request.auth.uid))
+        && get(/databases/$(database)/documents/roles/$(request.auth.uid)).data.role == "admin";
+    }
+
+    function hasPublicWorkerProfileShape(data) {
+      return data.keys().hasOnly([
+        "uid", "role", "fullName", "municipality", "avatarUrl",
+        "specialties", "coverageAreas", "bio", "experienceYears",
+        "hourlyRate", "verified", "ratingAvg", "completedJobs",
+        "distanceKm", "responseTime", "published"
+      ]);
+    }
+
+    function isParticipant(data) {
+      return signedIn() && request.auth.uid in data.participantIds;
+    }
+
+    function bookingAfter(bookingId) {
+      return getAfter(/databases/$(database)/documents/bookings/$(bookingId));
+    }
+
+    function serviceRequestAfter(requestId) {
+      return getAfter(/databases/$(database)/documents/serviceRequests/$(requestId));
+    }
+
+    function isBookingParty(booking, uid) {
+      return booking.data.clientId == uid || booking.data.workerId == uid;
+    }
+
+    function validBookingTransition(fromStatus, toStatus) {
+      return fromStatus == toStatus
+        || (fromStatus == "accepted" && toStatus in ["scheduled", "cancelled"])
+        || (fromStatus == "scheduled" && toStatus in ["completed", "cancelled"]);
+    }
+
+    function canNotifyRecipient(data) {
+      return data.userId == request.auth.uid
+        || isAdmin()
+        || (
+          data.relatedEntityType == "conversation"
+          && isParticipant(get(/databases/$(database)/documents/conversations/$(data.relatedEntityId)).data)
+          && data.userId in get(/databases/$(database)/documents/conversations/$(data.relatedEntityId)).data.participantIds
+        )
+        || (
+          data.relatedEntityType == "booking"
+          && isBookingParty(get(/databases/$(database)/documents/bookings/$(data.relatedEntityId)), request.auth.uid)
+          && isBookingParty(get(/databases/$(database)/documents/bookings/$(data.relatedEntityId)), data.userId)
+        )
+        || (
+          data.relatedEntityType == "serviceRequest"
+          && (
+            get(/databases/$(database)/documents/serviceRequests/$(data.relatedEntityId)).data.clientId == request.auth.uid
+            || get(/databases/$(database)/documents/serviceRequests/$(data.relatedEntityId)).data.workerId == request.auth.uid
+          )
+          && (
+            get(/databases/$(database)/documents/serviceRequests/$(data.relatedEntityId)).data.clientId == data.userId
+            || get(/databases/$(database)/documents/serviceRequests/$(data.relatedEntityId)).data.workerId == data.userId
+          )
+        )
+        || (
+          data.relatedEntityType == "jobEvidence"
+          && isBookingParty(
+            get(/databases/$(database)/documents/bookings/$(get(/databases/$(database)/documents/jobEvidences/$(data.relatedEntityId)).data.bookingId)),
+            request.auth.uid
+          )
+          && isBookingParty(
+            get(/databases/$(database)/documents/bookings/$(get(/databases/$(database)/documents/jobEvidences/$(data.relatedEntityId)).data.bookingId)),
+            data.userId
+          )
+        );
+    }
+
+    match /roles/{uid} {
+      allow read: if isOwner(uid) || isAdmin();
+      allow write: if isAdmin();
+    }
+
+    match /users/{uid} {
+      allow read: if isOwner(uid) || isAdmin();
+      allow create: if isAdmin() || (
+        isOwner(uid) && request.resource.data.role in ["cliente", "trabajador"]
+      );
+      allow update: if isAdmin() || (
+        isOwner(uid) && request.resource.data.role == resource.data.role
+      );
+      allow delete: if isAdmin();
+    }
+
+    match /publicProfiles/{uid} {
+      allow read: if true;
+      allow create, update: if (isOwner(uid) || isAdmin())
+        && request.resource.data.keys().hasOnly([
+          "uid", "role", "fullName", "municipality", "avatarUrl"
+        ])
+        && request.resource.data.uid == uid
+        && request.resource.data.role == getAfter(/databases/$(database)/documents/users/$(uid)).data.role;
+      allow delete: if isOwner(uid) || isAdmin();
+    }
+
+    match /workerProfiles/{uid} {
+      allow read: if isAdmin() || isOwner(uid) || resource.data.published == true;
+      allow create: if hasPublicWorkerProfileShape(request.resource.data)
+        && (
+          isAdmin() || (
+            isOwner(uid)
+            && getAfter(/databases/$(database)/documents/users/$(uid)).data.role == "trabajador"
+            && request.resource.data.verified == false
+            && request.resource.data.ratingAvg == 0
+            && request.resource.data.completedJobs == 0
+            && request.resource.data.published == false
+          )
+        );
+      allow update: if hasPublicWorkerProfileShape(request.resource.data)
+        && (
+          isAdmin() || (
+            isOwner(uid)
+            && request.resource.data.verified == resource.data.verified
+            && request.resource.data.ratingAvg == resource.data.ratingAvg
+            && request.resource.data.completedJobs == resource.data.completedJobs
+            && request.resource.data.published == resource.data.published
+          )
+        );
+      allow delete: if isAdmin();
+    }
+
+    match /workerVerifications/{uid} {
+      allow read: if isOwner(uid) || isAdmin();
+      allow write: if isAdmin();
+    }
+
+    match /conversations/{conversationId} {
+      allow read, delete: if isParticipant(resource.data);
+      allow create: if isParticipant(request.resource.data)
+        && request.resource.data.participantIds.size() == 2
+        && exists(/databases/$(database)/documents/publicProfiles/$(request.resource.data.participantIds[0]))
+        && exists(/databases/$(database)/documents/publicProfiles/$(request.resource.data.participantIds[1]))
+        && request.resource.data.keys().hasOnly(["participantIds", "lastMessage", "updatedAt", "createdAt"]);
+      allow update: if isParticipant(resource.data)
+        && request.resource.data.participantIds == resource.data.participantIds
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(["lastMessage", "updatedAt"]);
+    }
+
+    match /messages/{messageId} {
+      allow read: if signedIn()
+        && isParticipant(get(/databases/$(database)/documents/conversations/$(resource.data.conversationId)).data);
+      allow create: if signedIn()
+        && request.resource.data.senderId == request.auth.uid
+        && request.resource.data.read == false
+        && request.resource.data.keys().hasOnly(["conversationId", "senderId", "text", "attachments", "createdAt", "read"])
+        && isParticipant(get(/databases/$(database)/documents/conversations/$(request.resource.data.conversationId)).data);
+      allow update: if isParticipant(get(/databases/$(database)/documents/conversations/$(resource.data.conversationId)).data)
+        && resource.data.senderId != request.auth.uid
+        && request.resource.data.conversationId == resource.data.conversationId
+        && request.resource.data.senderId == resource.data.senderId
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(["read"]);
+      allow delete: if false;
+    }
+
+    match /serviceRequests/{requestId} {
+      allow read: if isAdmin() || (signedIn()
+        && (resource.data.clientId == request.auth.uid || resource.data.workerId == request.auth.uid)
+      );
+      allow create: if signedIn()
+        && request.resource.data.clientId == request.auth.uid
+        && request.resource.data.status in ["pending", "scheduled"];
+      allow update: if isAdmin() || (
+        signedIn()
+        && (resource.data.clientId == request.auth.uid || resource.data.workerId == request.auth.uid)
+        && request.resource.data.clientId == resource.data.clientId
+        && request.resource.data.workerId == resource.data.workerId
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(["status", "updatedAt"])
+      );
+      allow delete: if signedIn() && resource.data.clientId == request.auth.uid;
+    }
+
+    match /bookings/{bookingId} {
+      allow read: if isAdmin() || (signedIn()
+        && (resource.data.clientId == request.auth.uid || resource.data.workerId == request.auth.uid)
+      );
+      allow create: if signedIn()
+        && request.resource.data.clientId == request.auth.uid
+        && request.resource.data.status == "scheduled"
+        && request.resource.data.workerId is string
+        && request.resource.data.workerId.size() > 0
+        && serviceRequestAfter(request.resource.data.requestId).data.clientId == request.auth.uid
+        && serviceRequestAfter(request.resource.data.requestId).data.workerId == request.resource.data.workerId
+        && serviceRequestAfter(request.resource.data.requestId).data.status in ["pending", "scheduled"];
+      allow update: if (
+        isAdmin() || (
+          signedIn()
+          && (resource.data.clientId == request.auth.uid || resource.data.workerId == request.auth.uid)
+        )
+      )
+        && request.resource.data.clientId == resource.data.clientId
+        && request.resource.data.workerId == resource.data.workerId
+        && request.resource.data.requestId == resource.data.requestId
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(["status", "scheduledAt", "notes", "updatedAt"])
+        && (isAdmin() || validBookingTransition(resource.data.status, request.resource.data.status));
+      allow delete: if false;
+    }
+
+    match /notifications/{notificationId} {
+      allow read, delete: if isAdmin() || (signedIn() && resource.data.userId == request.auth.uid);
+      allow create: if signedIn()
+        && request.resource.data.actorId == request.auth.uid
+        && request.resource.data.read == false
+        && canNotifyRecipient(request.resource.data);
+      allow update: if (isAdmin() || (signedIn() && resource.data.userId == request.auth.uid))
+        && request.resource.data.userId == resource.data.userId
+        && request.resource.data.actorId == resource.data.actorId
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(["read"]);
+    }
+
+    match /reviews/{reviewId} {
+      allow read: if true;
+      allow create: if signedIn()
+        && request.resource.data.bookingId == reviewId
+        && request.resource.data.clientId == request.auth.uid
+        && request.resource.data.keys().hasOnly(["bookingId", "clientId", "workerId", "rating", "comment", "createdAt"])
+        && request.resource.data.rating is number
+        && request.resource.data.rating >= 1
+        && request.resource.data.rating <= 5
+        && request.resource.data.comment is string
+        && request.resource.data.comment.size() >= 3
+        && request.resource.data.comment.size() <= 1000
+        && get(/databases/$(database)/documents/bookings/$(reviewId)).data.clientId == request.auth.uid
+        && get(/databases/$(database)/documents/bookings/$(reviewId)).data.workerId == request.resource.data.workerId
+        && get(/databases/$(database)/documents/bookings/$(reviewId)).data.status == "completed";
+      allow update, delete: if false;
+    }
+
+    match /supportReports/{reportId} {
+      allow create: if signedIn() && request.resource.data.userId == request.auth.uid;
+      allow read: if isAdmin() || (signedIn() && resource.data.userId == request.auth.uid);
+      allow update: if isAdmin()
+        && request.resource.data.userId == resource.data.userId
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(["status", "updatedAt"]);
+      allow delete: if false;
+    }
+
+    match /jobHistory/{historyId} {
+      allow read: if isAdmin() || (signedIn() && resource.data.userId == request.auth.uid);
+      allow create: if isAdmin() || (
+        signedIn()
+        && isBookingParty(bookingAfter(request.resource.data.bookingId), request.auth.uid)
+        && isBookingParty(bookingAfter(request.resource.data.bookingId), request.resource.data.userId)
+        && request.resource.data.clientId == bookingAfter(request.resource.data.bookingId).data.clientId
+        && request.resource.data.workerId == bookingAfter(request.resource.data.bookingId).data.workerId
+      );
+      allow update: if isAdmin() || (
+        signedIn()
+        && resource.data.userId == request.auth.uid
+        && request.resource.data.userId == request.auth.uid
+        && request.resource.data.bookingId == resource.data.bookingId
+        && request.resource.data.clientId == resource.data.clientId
+        && request.resource.data.workerId == resource.data.workerId
+      );
+      allow delete: if false;
+    }
+
+    match /jobEvidences/{evidenceId} {
+      allow read: if isAdmin() || (
+        signedIn()
+        && isBookingParty(get(/databases/$(database)/documents/bookings/$(resource.data.bookingId)), request.auth.uid)
+      );
+      allow create: if isAdmin() || (
+        signedIn()
+        && request.resource.data.workerId == request.auth.uid
+        && get(/databases/$(database)/documents/bookings/$(request.resource.data.bookingId)).data.workerId == request.auth.uid
+      );
+      allow update: if (isAdmin() || (signedIn() && resource.data.workerId == request.auth.uid))
+        && resource.data.bookingId == request.resource.data.bookingId
+        && resource.data.workerId == request.resource.data.workerId
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(["phase", "imageUrl", "description"]);
+      allow delete: if isAdmin() || (signedIn() && resource.data.workerId == request.auth.uid);
+    }
+
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

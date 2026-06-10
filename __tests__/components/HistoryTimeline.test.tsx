@@ -16,6 +16,10 @@ jest.mock("../../components/EvidenceManager", () => ({
   EvidenceManager: ({ bookingId }: { bookingId: string }) => <div>Evidencia {bookingId}</div>,
 }));
 
+jest.mock("../../components/RatingForm", () => ({
+  RatingForm: ({ bookingId }: { bookingId: string }) => <div>Calificar {bookingId}</div>,
+}));
+
 jest.mock("../../lib/firebase-data", () => ({
   timestampToText: jest.fn(() => "fecha mock"),
 }));
@@ -154,6 +158,23 @@ describe("HistoryTimeline", () => {
       [{ field: "workerId", op: "==", value: "worker-1" }],
       { enabled: true },
     );
+  });
+
+  it("offers review only to the client for a completed booking", () => {
+    mockUseAuth.mockReturnValue({
+      firebaseUser: null,
+      profile: { ...workerProfile, uid: "client-1", role: "cliente" },
+      loading: false,
+      error: "",
+      login: jest.fn(),
+      register: jest.fn(),
+      logout: jest.fn(),
+      updateLocalProfile: jest.fn(),
+    });
+
+    render(<HistoryTimeline />);
+
+    expect(screen.getByText("Calificar booking-1")).toBeInTheDocument();
   });
 
   it("disables history collection reads when there is no profile", () => {

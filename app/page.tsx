@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { SearchBar } from "@/components/SearchBar";
-import { WorkerCard } from "@/components/WorkerCard";
-import { serviceCategories, workers } from "@/lib/mock-data";
+import { FeaturedWorkers } from "@/components/FeaturedWorkers";
+import { serviceCategories } from "@/lib/catalog";
 
 export default function Home() {
   return (
@@ -64,9 +64,7 @@ export default function Home() {
           </Link>
         </div>
         <div className="grid gap-4 lg:grid-cols-3">
-          {workers.slice(0, 3).map((worker) => (
-            <WorkerCard key={worker.uid} worker={worker} />
-          ))}
+          <FeaturedWorkers />
         </div>
       </section>
 

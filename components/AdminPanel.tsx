@@ -1,17 +1,19 @@
 "use client";
 
-import { doc, serverTimestamp, updateDoc } from "firebase/firestore";
+import { arrayUnion, doc, serverTimestamp, updateDoc, writeBatch } from "firebase/firestore";
 import { useEffect, useState } from "react";
 import { db } from "@/firebase";
 import { createNotification, fetchAdminCollections, serviceRequestStatuses, timestampToText } from "@/lib/firebase-data";
-import type { Booking, Notification, Review, ServiceRequest, SupportReport, UserProfile, WorkerProfile } from "@/lib/types";
+import type { AdminWorkerProfile, Booking, Notification, Review, ServiceRequest, SupportReport, UserProfile } from "@/lib/types";
 import { useAuth } from "./AuthProvider";
 import { EmptyState } from "./EmptyState";
 import { StatusBadge } from "./StatusBadge";
+import { MetricCard } from "./ui/MetricCard";
+import { SectionCard } from "./ui/SectionCard";
 
 type AdminData = {
   users: UserProfile[];
-  workers: WorkerProfile[];
+  workers: AdminWorkerProfile[];
   serviceRequests: ServiceRequest[];
   bookings: Booking[];
   reviews: Review[];
@@ -69,26 +71,55 @@ export function AdminPanel() {
     };
   }, []);
 
-  async function verifyWorker(worker: WorkerProfile, nextStatus: "verified" | "rejected" | "pending") {
+  async function verifyWorker(worker: AdminWorkerProfile, nextStatus: "verified" | "rejected" | "pending") {
     if (!profile) return;
     setStatus("");
+    setError("");
     try {
-      await updateDoc(doc(db, "workerProfiles", worker.uid), {
+      const batch = writeBatch(db);
+      batch.set(doc(db, "workerProfiles", worker.uid), {
+        uid: worker.uid,
+        role: "trabajador",
+        fullName: worker.fullName,
+        municipality: worker.municipality,
+        avatarUrl: worker.avatarUrl,
+        specialties: worker.specialties,
+        coverageAreas: worker.coverageAreas,
+        bio: worker.bio,
+        experienceYears: worker.experienceYears,
+        hourlyRate: worker.hourlyRate,
         verified: nextStatus === "verified",
-        verificationStatus: nextStatus,
-        verificationNotes: nextStatus === "verified" ? "Perfil revisado y aprobado por administración." : "Revisión actualizada por administración.",
-        verifiedAt: nextStatus === "verified" ? serverTimestamp() : null,
-        verifiedBy: profile.uid,
+        published: nextStatus === "verified",
+        ratingAvg: worker.ratingAvg,
+        completedJobs: worker.completedJobs,
+        distanceKm: worker.distanceKm,
+        responseTime: worker.responseTime,
       });
-      await createNotification({
+      batch.set(doc(db, "publicProfiles", worker.uid), {
+        uid: worker.uid,
+        role: "trabajador",
+        fullName: worker.fullName,
+        municipality: worker.municipality,
+        avatarUrl: worker.avatarUrl,
+      }, { merge: true });
+      batch.set(doc(db, "workerVerifications", worker.uid), {
+        status: nextStatus,
+        notes: nextStatus === "verified" ? "Perfil revisado y aprobado por administración." : "Revisión actualizada por administración.",
+        reviewedAt: serverTimestamp(),
+        reviewedBy: profile.uid,
+      }, { merge: true });
+      await batch.commit();
+      const notificationResult = await Promise.allSettled([createNotification({
         userId: worker.uid,
         type: "verification",
         title: nextStatus === "verified" ? "Perfil verificado" : "Verificación actualizada",
         message: nextStatus === "verified" ? "Tu perfil profesional fue aprobado." : "Administración actualizó el estado de tu verificación.",
         relatedEntityId: worker.uid,
         relatedEntityType: "workerProfile",
-      });
-      setStatus("Estado de verificación actualizado.");
+      })]);
+      setStatus(notificationResult[0].status === "rejected"
+        ? "Estado de verificación actualizado. No pudimos enviar la notificación."
+        : "Estado de verificación actualizado.");
       await refresh();
     } catch {
       setError("No pudimos actualizar la verificación.");
@@ -96,16 +127,38 @@ export function AdminPanel() {
   }
 
   async function updateRequestStatus(request: ServiceRequest, nextStatus: string) {
+    setStatus("");
+    setError("");
     try {
-      await updateDoc(doc(db, "serviceRequests", request.id), { status: nextStatus, updatedAt: serverTimestamp() });
-      await createNotification({
+      const batch = writeBatch(db);
+      const updatedAt = serverTimestamp();
+      batch.update(doc(db, "serviceRequests", request.id), { status: nextStatus, updatedAt });
+      const relatedBookings = data.bookings.filter((booking) => booking.requestId === request.id);
+      relatedBookings.forEach((booking) => {
+        batch.update(doc(db, "bookings", booking.id), { status: nextStatus, updatedAt });
+        const historyUpdate = {
+          bookingId: booking.id,
+          clientId: booking.clientId,
+          workerId: booking.workerId,
+          status: nextStatus,
+          events: arrayUnion(`Estado actualizado por administración: ${nextStatus}`),
+          updatedAt,
+        };
+        batch.set(doc(db, "jobHistory", `${booking.id}_${booking.clientId}`), { ...historyUpdate, userId: booking.clientId }, { merge: true });
+        batch.set(doc(db, "jobHistory", `${booking.id}_${booking.workerId}`), { ...historyUpdate, userId: booking.workerId }, { merge: true });
+      });
+      await batch.commit();
+      const notificationResult = await Promise.allSettled([createNotification({
         userId: request.clientId,
         type: "serviceRequest",
         title: "Solicitud actualizada",
         message: `Tu solicitud "${request.title}" ahora está en estado ${nextStatus}.`,
         relatedEntityId: request.id,
         relatedEntityType: "serviceRequest",
-      });
+      })]);
+      setStatus(notificationResult[0].status === "rejected"
+        ? "Estado actualizado. No pudimos enviar la notificación."
+        : "Estado de solicitud actualizado.");
       await refresh();
     } catch {
       setError("No pudimos actualizar la solicitud.");
@@ -113,16 +166,21 @@ export function AdminPanel() {
   }
 
   async function attendReport(report: SupportReport) {
+    setStatus("");
+    setError("");
     try {
       await updateDoc(doc(db, "supportReports", report.id), { status: "attended", updatedAt: serverTimestamp() });
-      await createNotification({
+      const notificationResult = await Promise.allSettled([createNotification({
         userId: report.userId,
         type: "support",
         title: "Reporte atendido",
         message: `Tu reporte "${report.subject}" fue marcado como atendido.`,
         relatedEntityId: report.id,
         relatedEntityType: "supportReport",
-      });
+      })]);
+      setStatus(notificationResult[0].status === "rejected"
+        ? "Reporte atendido. No pudimos enviar la notificación."
+        : "Reporte atendido.");
       await refresh();
     } catch {
       setError("No pudimos marcar el reporte como atendido.");
@@ -133,7 +191,7 @@ export function AdminPanel() {
 
   return (
     <div className="grid gap-6">
-      {(error || status) && <p className={`rounded-2xl px-4 py-3 text-sm font-semibold ${error ? "bg-rose-50 text-rose-700" : "bg-emerald-50 text-emerald-800"}`}>{error || status}</p>}
+      {(error || status) && <p aria-live="polite" role={error ? "alert" : "status"} className={`rounded-2xl px-4 py-3 text-sm font-semibold ${error ? "bg-rose-50 text-rose-700" : "bg-emerald-50 text-emerald-800"}`}>{error || status}</p>}
 
       <div className="grid gap-4 sm:grid-cols-4">
         {[
@@ -142,23 +200,21 @@ export function AdminPanel() {
           ["Solicitudes", data.serviceRequests.length],
           ["Reportes abiertos", data.reports.filter((report) => report.status !== "attended").length],
         ].map(([label, value]) => (
-          <div key={label} className="metric-card">
-            <span>{label}</span>
-            <strong>{loading ? "..." : value}</strong>
-          </div>
+          <MetricCard key={label} label={label} value={value} loading={loading} />
         ))}
       </div>
 
-      <section className="soft-card p-5">
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <h2 className="section-title">Verificación de trabajadores</h2>
-          <select className="rounded-2xl border border-slate-200 px-4 py-2 text-sm font-bold" value={filter} onChange={(event) => setFilter(event.target.value)}>
+      <SectionCard
+        title="Verificación de trabajadores"
+        actions={
+          <select aria-label="Filtrar verificaciones" className="rounded-2xl border border-slate-200 px-4 py-2 text-sm font-bold" value={filter} onChange={(event) => setFilter(event.target.value)}>
             <option value="todos">Todos</option>
             <option value="pending">Pendientes</option>
             <option value="verified">Verificados</option>
             <option value="rejected">Rechazados</option>
           </select>
-        </div>
+        }
+      >
         <div className="mt-4 grid gap-3">
           {workersToReview.length ? (
             workersToReview.map((worker) => (
@@ -188,7 +244,7 @@ export function AdminPanel() {
             <EmptyState title="Sin trabajadores en este filtro" message="Cuando existan perfiles profesionales, aparecerán aquí para revisión." />
           )}
         </div>
-      </section>
+      </SectionCard>
 
       <section className="grid gap-6 lg:grid-cols-2">
         <div className="soft-card p-5">
@@ -203,7 +259,7 @@ export function AdminPanel() {
                   </div>
                   <StatusBadge status={request.status} />
                 </div>
-                <select className="mt-3 rounded-lg border border-[#c0c8c4] px-3 py-2 text-sm font-bold" value={request.status} onChange={(event) => updateRequestStatus(request, event.target.value)}>
+                <select aria-label={`Estado de ${request.title}`} className="mt-3 rounded-lg border border-[#c0c8c4] px-3 py-2 text-sm font-bold" value={request.status} onChange={(event) => updateRequestStatus(request, event.target.value)}>
                   {serviceRequestStatuses.map((status) => (
                     <option key={status} value={status}>
                       {status}

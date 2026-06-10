@@ -9,6 +9,7 @@ import { EmptyState } from "./EmptyState";
 import { EvidenceManager } from "./EvidenceManager";
 import { StatusBadge } from "./StatusBadge";
 import { LoadingSkeleton } from "./ui/LoadingSkeleton";
+import { RatingForm } from "./RatingForm";
 
 export function HistoryTimeline({ focusBookingId = "" }: { focusBookingId?: string }) {
   const { profile } = useAuth();
@@ -123,6 +124,9 @@ export function HistoryTimeline({ focusBookingId = "" }: { focusBookingId?: stri
                 ))}
               </div>
               <EvidenceManager bookingId={item.bookingId} workerId={item.workerId} clientId={item.clientId} />
+              {profile?.role === "cliente" && item.status === "completed" && item.workerId && (
+                <RatingForm bookingId={item.bookingId} workerId={item.workerId} />
+              )}
             </div>
           </div>
         </article>

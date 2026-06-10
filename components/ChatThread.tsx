@@ -1,13 +1,13 @@
 "use client";
 
-import { addDoc, collection, doc, getDoc, onSnapshot, query, serverTimestamp, setDoc, where } from "firebase/firestore";
+import { addDoc, collection, doc, onSnapshot, query, serverTimestamp, setDoc, updateDoc, where } from "firebase/firestore";
 import { FormEvent, useEffect, useMemo, useState } from "react";
 import { db } from "@/firebase";
-import { createNotification, fetchWorkerById, timestampToText } from "@/lib/firebase-data";
-import { messages as mockMessages, workers as fallbackWorkers } from "@/lib/mock-data";
+import { createNotification, fetchPublicProfile, fetchWorkerById, timestampToText } from "@/lib/firebase-data";
 import type { ConversationMessage, WorkerProfile } from "@/lib/types";
 import { useAuth } from "./AuthProvider";
 import { WorkerAvatar } from "./WorkerCard";
+import { NegotiationCard } from "./NegotiationCard";
 
 function createdAtMillis(message: ConversationMessage) {
   const value = message.createdAt;
@@ -19,7 +19,7 @@ function createdAtMillis(message: ConversationMessage) {
 
 export function ChatThread({ conversationId }: { conversationId: string }) {
   const { profile } = useAuth();
-  const [worker, setWorker] = useState<WorkerProfile | null>(() => fallbackWorkers.find((item) => item.uid === conversationId) || null);
+  const [worker, setWorker] = useState<WorkerProfile | null>(null);
   const [activeConversationId, setActiveConversationId] = useState(conversationId);
   const [messages, setMessages] = useState<ConversationMessage[]>([]);
   const [draft, setDraft] = useState("");
@@ -34,22 +34,20 @@ export function ChatThread({ conversationId }: { conversationId: string }) {
       setLoading(true);
       setError("");
       try {
-        const [workerProfile, userSnapshot] = await Promise.all([
-          fetchWorkerById(conversationId),
-          getDoc(doc(db, "users", conversationId)),
+        const resolvedConversationId = [profile.uid, conversationId].sort().join("_");
+        const [workerProfile, publicProfile] = await Promise.all([
+          fetchWorkerById(conversationId).catch(() => null),
+          fetchPublicProfile(conversationId),
         ]);
-        const fallbackWorker = fallbackWorkers.find((item) => item.uid === conversationId) || null;
-        const userData = userSnapshot.exists() ? userSnapshot.data() : null;
         const resolvedWorker =
           workerProfile ||
-          fallbackWorker ||
-          (userData
+          (publicProfile
             ? ({
                 uid: conversationId,
-                fullName: typeof userData.fullName === "string" ? userData.fullName : "Usuario FixMySpace",
-                municipality: typeof userData.municipality === "string" ? userData.municipality : "",
-                avatarUrl: typeof userData.avatarUrl === "string" ? userData.avatarUrl : "",
-                specialties: [typeof userData.role === "string" ? userData.role : "Chat"],
+                fullName: publicProfile.fullName || "Perfil no disponible",
+                municipality: publicProfile.municipality || "",
+                avatarUrl: publicProfile.avatarUrl || "",
+                specialties: [publicProfile.role],
                 coverageAreas: [],
                 bio: "",
                 experienceYears: 0,
@@ -61,14 +59,9 @@ export function ChatThread({ conversationId }: { conversationId: string }) {
                 responseTime: "Conversación",
               } satisfies WorkerProfile)
             : null);
-        const resolvedConversationId = [profile.uid, conversationId].sort().join("_");
-
         await setDoc(
           doc(db, "conversations", resolvedConversationId),
-          {
-            participantIds: [profile.uid, conversationId],
-            updatedAt: serverTimestamp(),
-          },
+          { participantIds: [profile.uid, conversationId] },
           { merge: true },
         );
 
@@ -78,7 +71,7 @@ export function ChatThread({ conversationId }: { conversationId: string }) {
         }
       } catch {
         if (!cancelled) {
-          setWorker(fallbackWorkers.find((item) => item.uid === conversationId) || null);
+          setWorker(null);
           setError("No pudimos preparar la conversación en Firestore.");
         }
       } finally {
@@ -109,10 +102,7 @@ export function ChatThread({ conversationId }: { conversationId: string }) {
     return unsubscribe;
   }, [activeConversationId, profile]);
 
-  const visibleMessages = useMemo(() => {
-    if (messages.length) return messages;
-    return mockMessages.filter((message) => message.conversationId === conversationId).slice(0, 2);
-  }, [conversationId, messages]);
+  const visibleMessages = useMemo(() => messages, [messages]);
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -127,17 +117,13 @@ export function ChatThread({ conversationId }: { conversationId: string }) {
         senderId: profile.uid,
         text,
         attachments: [],
+        read: false,
         createdAt: serverTimestamp(),
       });
-      await setDoc(
-        doc(db, "conversations", activeConversationId),
-        {
-          participantIds: worker ? [profile.uid, worker.uid] : [profile.uid],
+      await updateDoc(doc(db, "conversations", activeConversationId), {
           lastMessage: text,
           updatedAt: serverTimestamp(),
-        },
-        { merge: true },
-      );
+        });
 
       if (worker && worker.uid !== profile.uid) {
         await createNotification({
@@ -159,7 +145,7 @@ export function ChatThread({ conversationId }: { conversationId: string }) {
     worker ||
     ({
       uid: "conversation",
-      fullName: "Conversación",
+      fullName: "Perfil no disponible",
       municipality: "",
       avatarUrl: "",
       specialties: ["Chat"],
@@ -171,7 +157,7 @@ export function ChatThread({ conversationId }: { conversationId: string }) {
       ratingAvg: 0,
       completedJobs: 0,
       distanceKm: 0,
-      responseTime: "Firestore",
+      responseTime: "Sin datos de Firebase",
     } satisfies WorkerProfile);
 
   return (
@@ -187,6 +173,10 @@ export function ChatThread({ conversationId }: { conversationId: string }) {
         </header>
 
         {error && <p className="m-4 rounded-lg bg-[#ffdad6] px-4 py-3 text-sm font-semibold text-[#93000a]">{error}</p>}
+
+        {profile && (
+          <NegotiationCard currentProfile={profile} otherUserId={conversationId} />
+        )}
 
         <div className="flex-1 space-y-4 overflow-y-auto bg-[#f2f4f2] p-4 sm:p-6">
           {visibleMessages.length ? (

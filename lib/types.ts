@@ -11,6 +11,8 @@ export type UserProfile = {
   createdAt?: unknown;
 };
 
+export type PublicProfile = Pick<UserProfile, "uid" | "role" | "fullName" | "municipality" | "avatarUrl">;
+
 export type WorkerProfile = {
   uid: string;
   fullName: string;
@@ -22,14 +24,22 @@ export type WorkerProfile = {
   experienceYears: number;
   hourlyRate: number;
   verified: boolean;
-  verificationStatus?: "pending" | "verified" | "rejected";
-  verificationNotes?: string;
-  verifiedAt?: unknown;
-  verifiedBy?: string;
+  published?: boolean;
   ratingAvg: number;
   completedJobs: number;
   distanceKm: number;
   responseTime: string;
+};
+
+export type WorkerVerification = {
+  status: "pending" | "verified" | "rejected";
+  notes?: string;
+  reviewedAt?: unknown;
+  reviewedBy?: string;
+};
+
+export type AdminWorkerProfile = WorkerProfile & {
+  verificationStatus: WorkerVerification["status"];
 };
 
 export type ServiceRequest = {
@@ -43,8 +53,13 @@ export type ServiceRequest = {
   address: string;
   preferredDate: string;
   preferredTime: string;
+  price?: number;
   photos: string[];
-  status: "pending" | "accepted" | "scheduled" | "completed" | "cancelled";
+  status: "pending" | "negotiating" | "accepted" | "scheduled" | "completed" | "cancelled" | "rejected";
+  proposedPrice?: number;
+  proposedDate?: string;
+  proposedTime?: string;
+  lastProposalBy?: string;
   createdAt?: unknown;
 };
 
@@ -74,6 +89,7 @@ export type ConversationMessage = {
   text: string;
   attachments: string[];
   createdAt: unknown;
+  read?: boolean;
 };
 
 export type Review = {
@@ -119,6 +135,7 @@ export type Notification = {
   read: boolean;
   relatedEntityId?: string;
   relatedEntityType?: string;
+  actorId?: string;
   createdAt?: unknown;
 };
 

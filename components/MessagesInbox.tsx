@@ -9,6 +9,7 @@ import { timestampToText } from "@/lib/firebase-data";
 import type { Conversation } from "@/lib/types";
 import { useAuth } from "./AuthProvider";
 import { EmptyState } from "./EmptyState";
+import { LoadingSkeleton } from "./ui/LoadingSkeleton";
 
 type ConversationPreview = Conversation & {
   partnerId: string;
@@ -94,20 +95,20 @@ export function MessagesInbox() {
         const previews = await Promise.all(
           conversationDocuments.map(async (conversation) => {
             const partnerId = conversation.participantIds.find((id) => id !== profile.uid) || "";
-            let partnerName = "Conversación";
-            let partnerRole = "usuario";
+            let partnerName = "Perfil no disponible";
+            let partnerRole = "";
 
             if (partnerId) {
               try {
-                const partnerSnapshot = await getDoc(doc(db, "users", partnerId));
+                const partnerSnapshot = await getDoc(doc(db, "publicProfiles", partnerId));
                 if (partnerSnapshot.exists()) {
                   const partner = partnerSnapshot.data();
                   partnerName = typeof partner.fullName === "string" ? partner.fullName : partnerName;
                   partnerRole = typeof partner.role === "string" ? partner.role : partnerRole;
                 }
               } catch {
-                partnerName = "Conversación";
-                partnerRole = "usuario";
+                partnerName = "Perfil no disponible";
+                partnerRole = "";
               }
             }
 
@@ -143,9 +144,7 @@ export function MessagesInbox() {
   if (loading) {
     return (
       <div className="grid gap-3">
-        {[0, 1, 2].map((item) => (
-          <div key={item} className="soft-card h-24 animate-pulse bg-white" />
-        ))}
+        <LoadingSkeleton count={3} />
       </div>
     );
   }
@@ -168,7 +167,7 @@ export function MessagesInbox() {
         >
           <div className="flex items-start justify-between gap-4">
             <div className="min-w-0">
-              <p className="text-xs font-bold uppercase tracking-wide text-[#5f5e5a]">{conversation.partnerRole}</p>
+              {conversation.partnerRole && <p className="text-xs font-bold uppercase tracking-wide text-[#5f5e5a]">{conversation.partnerRole}</p>}
               <h2 className="mt-1 text-lg font-bold text-[#191c1b]">{conversation.partnerName}</h2>
               <p className="mt-2 line-clamp-2 text-sm leading-6 text-[#414845]">{conversation.lastMessage || "Conversación iniciada. Escribe para continuar."}</p>
             </div>

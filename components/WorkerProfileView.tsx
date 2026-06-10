@@ -3,10 +3,8 @@
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { fetchReviewsByWorker, fetchWorkerById, timestampToText } from "@/lib/firebase-data";
-import { workers as fallbackWorkers } from "@/lib/mock-data";
 import type { Review, WorkerProfile } from "@/lib/types";
 import { EmptyState } from "./EmptyState";
-import { RatingForm } from "./RatingForm";
 import { WorkerAvatar } from "./WorkerCard";
 
 export function WorkerProfileView({ workerId }: { workerId: string }) {
@@ -24,13 +22,13 @@ export function WorkerProfileView({ workerId }: { workerId: string }) {
       try {
         const [firestoreWorker, firestoreReviews] = await Promise.all([fetchWorkerById(workerId), fetchReviewsByWorker(workerId)]);
         if (!cancelled) {
-          setWorker(firestoreWorker || fallbackWorkers.find((item) => item.uid === workerId) || null);
+          setWorker(firestoreWorker);
           setReviews(firestoreReviews);
         }
       } catch {
         if (!cancelled) {
-          setWorker(fallbackWorkers.find((item) => item.uid === workerId) || null);
-          setError("No pudimos leer Firestore. Mostramos información de respaldo si existe.");
+          setWorker(null);
+          setError("No pudimos leer el perfil desde Firestore.");
         }
       } finally {
         if (!cancelled) setLoading(false);
@@ -156,9 +154,6 @@ export function WorkerProfileView({ workerId }: { workerId: string }) {
         </div>
       </section>
 
-      <div className="mt-6">
-        <RatingForm workerId={worker.uid} />
-      </div>
     </div>
   );
 }

@@ -2,7 +2,7 @@
 
 import { useRouter } from "next/navigation";
 import { FormEvent, useState } from "react";
-import { municipalities, serviceCategories } from "@/lib/mock-data";
+import { municipalities, serviceCategories } from "@/lib/catalog";
 
 export function SearchBar({ compact = false }: { compact?: boolean }) {
   const router = useRouter();

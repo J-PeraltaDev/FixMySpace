@@ -113,6 +113,8 @@ describe("DashboardView", () => {
   it("renders worker dashboard data from role-aware useCollection hooks", () => {
     render(<DashboardView />);
 
+    expect(screen.getByText("Panel trabajador")).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Hola, Lina" })).toBeInTheDocument();
     expect(screen.getByText("Reparacion de tuberia")).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "Arreglar lavamanos" })).toBeInTheDocument();
     expect(screen.getAllByText("Mensaje al cliente")).toHaveLength(2);
@@ -132,6 +134,16 @@ describe("DashboardView", () => {
       [{ field: "userId", op: "==", value: "worker-1" }],
       { enabled: true },
     );
+  });
+
+  it("renders worker quick actions with their role-specific destinations", () => {
+    render(<DashboardView />);
+
+    expect(screen.getByRole("link", { name: "Inicio" })).toHaveAttribute("href", "/dashboard");
+    expect(screen.getByRole("link", { name: "Mensajes" })).toHaveAttribute("href", "/mensajes");
+    expect(screen.getByRole("link", { name: "Mi perfil" })).toHaveAttribute("href", "/perfil");
+    expect(screen.getByRole("link", { name: "Verificación" })).toHaveAttribute("href", "/verificacion");
+    expect(screen.getByRole("link", { name: "Historial" })).toHaveAttribute("href", "/historial");
   });
 
   it("renders loaded bookings while requests are still loading", () => {
@@ -176,6 +188,12 @@ describe("DashboardView", () => {
 
     render(<DashboardView />);
 
+    expect(screen.getByText("Panel cliente")).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Hola, Lina" })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Buscar trabajadores" })).toHaveAttribute("href", "/buscar");
+    expect(screen.getAllByRole("link", { name: "Nueva solicitud" }).some((link) => link.getAttribute("href") === "/solicitudes/nueva")).toBe(true);
+    expect(screen.getByRole("link", { name: "Mensajes" })).toHaveAttribute("href", "/mensajes");
+    expect(screen.getByRole("link", { name: "Historial" })).toHaveAttribute("href", "/historial");
     expect(mockUseCollection).toHaveBeenCalledWith(
       "bookings",
       [{ field: "clientId", op: "==", value: "client-1" }],

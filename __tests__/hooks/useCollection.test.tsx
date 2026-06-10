@@ -4,6 +4,7 @@ import {
   mockCollection,
   mockDb,
   mockGetDocs,
+  mockLimit,
   mockOnSnapshot,
   mockOrderBy,
   mockQuery,
@@ -218,6 +219,19 @@ describe("useCollection", () => {
       expect.objectContaining({ field: "name", direction: "asc" }),
     );
     expect(mockGetDocs).toHaveBeenCalledTimes(1);
+  });
+
+  it("applies a stable result limit", async () => {
+    mockGetDocs.mockResolvedValue(makeSnapshot([]));
+
+    renderHook(() => useCollection("workers", [], { realtime: false, limit: 24 }));
+
+    await waitFor(() => expect(mockGetDocs).toHaveBeenCalledTimes(1));
+    expect(mockLimit).toHaveBeenCalledWith(24);
+    expect(mockQuery).toHaveBeenCalledWith(
+      expect.objectContaining({ path: "workers" }),
+      expect.objectContaining({ type: "limit", count: 24 }),
+    );
   });
 
   it("does not re-subscribe for equal inline empty-map filter values", () => {

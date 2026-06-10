@@ -2,6 +2,7 @@ import { render, screen } from "@testing-library/react";
 import { ChatThread } from "../../components/ChatThread";
 import { useAuth } from "../../components/AuthProvider";
 import type { UserProfile } from "../../lib/types";
+import { doc, getDoc, setDoc } from "firebase/firestore";
 
 jest.mock("../../components/AuthProvider", () => ({
   useAuth: jest.fn(),
@@ -30,11 +31,13 @@ jest.mock("firebase/firestore", () => ({
   query: jest.fn(),
   serverTimestamp: jest.fn(() => ({ serverTimestamp: true })),
   setDoc: jest.fn().mockResolvedValue(undefined),
+  updateDoc: jest.fn().mockResolvedValue(undefined),
   where: jest.fn(),
 }));
 
 jest.mock("../../lib/firebase-data", () => ({
   createNotification: jest.fn(),
+  fetchPublicProfile: jest.fn().mockResolvedValue(null),
   fetchWorkerById: jest.fn().mockResolvedValue({
     uid: "worker-1",
     fullName: "Ana Ruiz",
@@ -84,5 +87,12 @@ describe("ChatThread", () => {
     expect(await screen.findByRole("heading", { name: "Ana Ruiz" })).toBeInTheDocument();
     expect(screen.getByPlaceholderText("Escribe un mensaje")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Enviar" })).toBeInTheDocument();
+    expect(getDoc).not.toHaveBeenCalledWith({ id: "client-1_worker-1", path: "conversations" });
+    expect(doc).not.toHaveBeenCalledWith({}, "users", "worker-1");
+    expect(setDoc).toHaveBeenCalledWith(
+      { id: "client-1_worker-1", path: "conversations" },
+      { participantIds: ["client-1", "worker-1"] },
+      { merge: true },
+    );
   });
 });

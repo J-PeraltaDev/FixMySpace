@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { FormEvent, useState } from "react";
-import { municipalities } from "@/lib/mock-data";
+import { municipalities } from "@/lib/catalog";
 import type { UserRole } from "@/lib/types";
 import { useAuth } from "./AuthProvider";
 import { RoleToggle } from "./RoleToggle";

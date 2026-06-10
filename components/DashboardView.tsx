@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useMemo } from "react";
 import { useCollection } from "@/hooks/useCollection";
-import type { Booking, Notification, ServiceRequest } from "@/lib/types";
+import type { Booking, Notification, PublicProfile, ServiceRequest } from "@/lib/types";
 import { useAuth } from "./AuthProvider";
 import { BookingCard } from "./BookingCard";
 import { EmptyState } from "./EmptyState";
@@ -43,6 +43,36 @@ export function DashboardView() {
     [{ field: "userId", op: "==", value: userId }],
     { enabled: collectionEnabled },
   );
+  const { data: publicProfiles } = useCollection<PublicProfile>("publicProfiles", [], { enabled: collectionEnabled });
+  const publicNameById = new Map(publicProfiles.map((item) => [item.uid, item.fullName]));
+
+  const quickActions = useMemo(() => {
+    if (role === "admin") {
+      return [
+        { href: "/admin", label: "Administración" },
+        { href: "/verificacion", label: "Verificación" },
+        { href: "/mensajes", label: "Mensajes" },
+        { href: "/notificaciones", label: "Notificaciones" },
+      ];
+    }
+
+    if (role === "trabajador") {
+      return [
+        { href: "/dashboard", label: "Inicio" },
+        { href: "/mensajes", label: "Mensajes" },
+        { href: "/perfil", label: "Mi perfil" },
+        { href: "/verificacion", label: "Verificación" },
+        { href: "/historial", label: "Historial" },
+      ];
+    }
+
+    return [
+      { href: "/buscar", label: "Buscar trabajadores" },
+      { href: "/solicitudes/nueva", label: "Nueva solicitud" },
+      { href: "/mensajes", label: "Mensajes" },
+      { href: "/historial", label: "Historial" },
+    ];
+  }, [role]);
 
   const unread = notifications.filter((item) => !item.read).length;
   const activeServices = bookings.filter((booking) => !["completed", "cancelled"].includes(booking.status)).length;
@@ -56,8 +86,9 @@ export function DashboardView() {
     <div className="page-shell">
       <div className="mb-8 flex flex-col justify-between gap-4 sm:flex-row sm:items-end">
         <div>
+          <p className="eyebrow">Panel {role}</p>
           <h1 className="mt-3 text-4xl font-bold text-[#191c1b]">
-            {profile ? `Panel ${role}` : "Gestiona tu actividad en FixMySpace"}
+            {profile ? `Hola, ${profile.fullName.split(" ")[0]}` : "Gestiona tu actividad en FixMySpace"}
           </h1>
           <p className="mt-3 max-w-2xl text-[#414845]">Resumen de servicios, agenda, mensajes y notificaciones internas.</p>
         </div>
@@ -66,8 +97,17 @@ export function DashboardView() {
         </Link>
       </div>
 
-      <div className="grid gap-6 ">
-
+      <div className="grid gap-6 lg:grid-cols-[240px_1fr]">
+        <aside className="soft-card h-fit p-4 lg:sticky lg:top-24">
+          <h2 className="section-title">Acciones rápidas</h2>
+          <nav className="mt-4 grid gap-2">
+            {quickActions.map((action) => (
+              <Link key={action.href} href={action.href} className="rounded-lg px-3 py-2 text-sm font-semibold text-[#414845] transition hover:bg-[#bfecdd] hover:text-[#00261e]">
+                {action.label}
+              </Link>
+            ))}
+          </nav>
+        </aside>
         <section className="grid gap-6">
           {notificationsError && <p className="rounded-lg bg-[#ffdad6] px-4 py-3 text-sm font-semibold text-[#93000a]">No pudimos leer tus notificaciones desde Firestore.</p>}
 
@@ -85,7 +125,10 @@ export function DashboardView() {
               ) : bookingsLoading ? (
                 <div className="soft-card h-36 animate-pulse bg-white" />
               ) : bookings.length ? (
-                bookings.map((booking) => <BookingCard key={booking.id} booking={booking} role={profile?.role} />)
+                bookings.map((booking) => {
+                  const counterpartId = role === "trabajador" ? booking.clientId : booking.workerId;
+                  return <BookingCard key={booking.id} booking={booking} role={profile?.role} counterpartName={publicNameById.get(counterpartId)} />;
+                })
               ) : (
                 <EmptyState title="No tienes servicios agendados" message="Cuando crees o aceptes una solicitud, aparecerá aquí con su estado." />
               )}

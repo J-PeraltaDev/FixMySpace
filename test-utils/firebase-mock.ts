@@ -25,6 +25,7 @@ const orderByImplementation = (field: string, direction = "asc") => ({
   field,
   direction,
 });
+const limitImplementation = (count: number) => ({ type: "limit", count });
 const queryImplementation = (source: unknown, ...constraints: unknown[]) => ({
   type: "query",
   source,
@@ -44,6 +45,7 @@ const onSnapshotImplementation = (
 export const mockCollection = jest.fn(collectionImplementation);
 export const mockWhere = jest.fn(whereImplementation);
 export const mockOrderBy = jest.fn(orderByImplementation);
+export const mockLimit = jest.fn(limitImplementation);
 export const mockQuery = jest.fn(queryImplementation);
 export const mockGetDocs = jest.fn();
 export const mockOnSnapshot = jest.fn(onSnapshotImplementation);
@@ -51,6 +53,7 @@ export const mockOnSnapshot = jest.fn(onSnapshotImplementation);
 export const mockFirestore = {
   collection: mockCollection,
   getDocs: mockGetDocs,
+  limit: mockLimit,
   onSnapshot: mockOnSnapshot,
   orderBy: mockOrderBy,
   query: mockQuery,
@@ -71,6 +74,7 @@ export function resetFirestoreMocks() {
   mockCollection.mockReset().mockImplementation(collectionImplementation);
   mockWhere.mockReset().mockImplementation(whereImplementation);
   mockOrderBy.mockReset().mockImplementation(orderByImplementation);
+  mockLimit.mockReset().mockImplementation(limitImplementation);
   mockQuery.mockReset().mockImplementation(queryImplementation);
   mockGetDocs.mockReset();
   mockOnSnapshot.mockReset().mockImplementation(onSnapshotImplementation);

@@ -10,6 +10,7 @@ import {
 import {
   collection,
   getDocs,
+  limit as firestoreLimit,
   onSnapshot,
   orderBy,
   query,
@@ -36,6 +37,7 @@ export interface UseCollectionOptions {
   enabled?: boolean;
   realtime?: boolean;
   orderBy?: CollectionOrder[];
+  limit?: number;
 }
 
 export interface UseCollectionResult<T> {
@@ -171,6 +173,7 @@ function startCollectionRead<T>(
   path: string,
   filters: CollectionFilter[],
   orders: CollectionOrder[],
+  resultLimit: number | undefined,
   realtime: boolean,
   queryKey: string,
   setState: Dispatch<SetStateAction<{ queryKey: string; result: UseCollectionResult<T> }>>,
@@ -182,6 +185,7 @@ function startCollectionRead<T>(
     const constraints: QueryConstraint[] = [
       ...filters.map((filter) => where(filter.field, filter.op, filter.value)),
       ...orders.map((order) => orderBy(order.field, order.direction ?? "asc")),
+      ...(resultLimit ? [firestoreLimit(resultLimit)] : []),
     ];
     const collectionQuery = query(collection(db, path), ...constraints);
 
@@ -220,6 +224,7 @@ export function useCollection<T>(
   const enabled = options.enabled ?? true;
   const realtime = options.realtime ?? true;
   const orders = options.orderBy ?? [];
+  const resultLimit = options.limit;
   const filterSerialization = serializeSafely(filters);
   const orderSerialization = serializeSafely(orders);
   const serializationError = filterSerialization.error || orderSerialization.error;
@@ -228,6 +233,7 @@ export function useCollection<T>(
     realtime,
     filterSerialization.signature,
     orderSerialization.signature,
+    resultLimit ?? "unlimited",
   ].join("|");
   const renderKey = `${enabled ? "enabled" : "disabled"}|${serializationError ? "error" : "valid"}|${queryKey}`;
   const initialResult = !enabled
@@ -248,7 +254,7 @@ export function useCollection<T>(
   }
 
   const startReading = useEffectEvent(() =>
-    startCollectionRead(path, filters, orders, realtime, renderKey, setState),
+    startCollectionRead(path, filters, orders, resultLimit, realtime, renderKey, setState),
   );
 
   useEffect(() => {

@@ -10,6 +10,7 @@
     "lint": "eslint",
     "clean": "node -e \"require('fs').rmSync('.next',{recursive:true,force:true})\"",
     "test": "jest",
+    "test:rules": "node scripts/run-firestore-rules-tests.mjs",
     "test:watch": "jest --watch"
   },
   "dependencies": {
@@ -22,6 +23,7 @@
     "zod": "^4.4.3"
   },
   "devDependencies": {
+    "@firebase/rules-unit-testing": "^5.0.1",
     "@tailwindcss/postcss": "^4",
     "@testing-library/dom": "^10.4.1",
     "@testing-library/jest-dom": "^6.9.1",
@@ -32,6 +34,7 @@
     "@types/react-dom": "^19",
     "eslint": "^9",
     "eslint-config-next": "16.2.7",
+    "firebase-tools": "^15.19.1",
     "jest": "^30.4.2",
     "jest-environment-jsdom": "^30.4.1",
     "tailwindcss": "^4",

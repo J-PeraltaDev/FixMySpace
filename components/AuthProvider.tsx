@@ -8,10 +8,10 @@ import {
   signOut,
   updateProfile,
 } from "firebase/auth";
-import { doc, getDoc, serverTimestamp, setDoc } from "firebase/firestore";
+import { doc, getDoc, serverTimestamp, writeBatch } from "firebase/firestore";
 import { createContext, useContext, useEffect, useMemo, useState } from "react";
 import { auth, db } from "@/firebase";
-import { ensureWorkerProfile } from "@/lib/firebase-data";
+import { buildPublicProfile, buildWorkerProfile, syncPublicProfile } from "@/lib/firebase-data";
 import type { UserProfile, UserRole } from "@/lib/types";
 
 type RegisterInput = {
@@ -67,12 +67,18 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       try {
         const snapshot = await getDoc(doc(db, "users", user.uid));
         if (snapshot.exists()) {
-          setProfile({ uid: user.uid, ...(snapshot.data() as Omit<UserProfile, "uid">) });
+          const storedProfile = { uid: user.uid, ...(snapshot.data() as Omit<UserProfile, "uid">) };
+          try {
+            await syncPublicProfile(storedProfile);
+          } catch {
+            setError("Sesión activa, pero no pudimos sincronizar tu identidad pública.");
+          }
+          setProfile(storedProfile);
         } else {
           setProfile({
             uid: user.uid,
             role: "cliente",
-            fullName: user.displayName || "Usuario FixMySpace",
+            fullName: user.displayName || "Perfil sin nombre",
             phone: "",
             email: user.email || "",
             municipality: "",
@@ -82,7 +88,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         setProfile({
           uid: user.uid,
           role: "cliente",
-          fullName: user.displayName || "Usuario FixMySpace",
+          fullName: user.displayName || "Perfil sin nombre",
           phone: "",
           email: user.email || "",
           municipality: "",
@@ -109,8 +115,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   async function register(input: RegisterInput) {
     setError("");
+    let accountCreated = false;
     try {
       const credential = await createUserWithEmailAndPassword(auth, input.email, input.password);
+      accountCreated = true;
       await updateProfile(credential.user, { displayName: input.fullName });
 
       const userProfile: UserProfile = {
@@ -124,15 +132,19 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         createdAt: serverTimestamp(),
       };
 
-      await setDoc(doc(db, "users", credential.user.uid), userProfile);
-
+      const batch = writeBatch(db);
+      batch.set(doc(db, "users", credential.user.uid), userProfile);
+      batch.set(doc(db, "publicProfiles", credential.user.uid), buildPublicProfile(userProfile));
       if (input.role === "trabajador") {
-        await ensureWorkerProfile(credential.user.uid, input.municipality);
+        batch.set(doc(db, "workerProfiles", credential.user.uid), buildWorkerProfile(userProfile));
       }
+      await batch.commit();
 
       setProfile(userProfile);
     } catch (registerError) {
-      const message = friendlyAuthError(registerError);
+      const message = accountCreated
+        ? "La cuenta fue creada, pero no pudimos completar el perfil. Inicia sesión nuevamente para reintentar."
+        : friendlyAuthError(registerError);
       setError(message);
       throw new Error(message);
     }

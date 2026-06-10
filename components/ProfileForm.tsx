@@ -1,16 +1,17 @@
 "use client";
 
-import { doc, getDoc, setDoc } from "firebase/firestore";
+import { doc, getDoc, writeBatch } from "firebase/firestore";
 import { FormEvent, useEffect, useState } from "react";
 import { db } from "@/firebase";
-import { createNotification, ensureWorkerProfile } from "@/lib/firebase-data";
-import { municipalities, serviceCategories } from "@/lib/mock-data";
-import type { UserProfile, WorkerProfile } from "@/lib/types";
+import { municipalities, serviceCategories } from "@/lib/catalog";
+import { buildPublicProfile, createNotification, ensureWorkerProfile, resolveVerificationStatus } from "@/lib/firebase-data";
+import type { UserProfile, WorkerProfile, WorkerVerification } from "@/lib/types";
 import { useAuth } from "./AuthProvider";
 
 export function ProfileForm() {
   const { profile, updateLocalProfile } = useAuth();
   const [workerProfile, setWorkerProfile] = useState<Partial<WorkerProfile> | null>(null);
+  const [verification, setVerification] = useState<Partial<WorkerVerification> | null>(null);
   const [status, setStatus] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
@@ -21,10 +22,14 @@ export function ProfileForm() {
     async function loadWorkerProfile() {
       if (!profile || profile.role !== "trabajador") return;
       try {
-        const snapshot = await getDoc(doc(db, "workerProfiles", profile.uid));
-        if (!snapshot.exists()) await ensureWorkerProfile(profile.uid, profile.municipality);
+        const [snapshot, verificationSnapshot] = await Promise.all([
+          getDoc(doc(db, "workerProfiles", profile.uid)),
+          getDoc(doc(db, "workerVerifications", profile.uid)),
+        ]);
+        if (!snapshot.exists()) await ensureWorkerProfile(profile.uid, profile.municipality, profile);
         const freshSnapshot = snapshot.exists() ? snapshot : await getDoc(doc(db, "workerProfiles", profile.uid));
         if (!cancelled) setWorkerProfile(freshSnapshot.data() as Partial<WorkerProfile>);
+        if (!cancelled) setVerification(verificationSnapshot.exists() ? verificationSnapshot.data() as Partial<WorkerVerification> : null);
       } catch {
         if (!cancelled) setError("No pudimos leer tu perfil profesional.");
       }
@@ -59,7 +64,9 @@ export function ProfileForm() {
 
     try {
       setLoading(true);
-      await setDoc(doc(db, "users", profile.uid), nextProfile, { merge: true });
+      const batch = writeBatch(db);
+      batch.set(doc(db, "users", profile.uid), nextProfile, { merge: true });
+      batch.set(doc(db, "publicProfiles", profile.uid), buildPublicProfile(nextProfile), { merge: true });
 
       if (profile.role === "trabajador") {
         const specialties = String(data.get("specialties") || "")
@@ -71,35 +78,39 @@ export function ProfileForm() {
           .map((item) => item.trim())
           .filter(Boolean);
 
-        await setDoc(
+        batch.set(
           doc(db, "workerProfiles", profile.uid),
           {
+            uid: profile.uid,
+            role: "trabajador",
+            fullName: nextProfile.fullName,
+            municipality: nextProfile.municipality,
+            avatarUrl: nextProfile.avatarUrl || "",
             specialties,
             coverageAreas,
             bio: String(data.get("bio") || "").trim(),
             experienceYears: Number(data.get("experienceYears") || 0),
             hourlyRate: Number(data.get("hourlyRate") || 0),
-            verified: workerProfile?.verified ?? false,
-            verificationStatus: workerProfile?.verificationStatus || "pending",
-            verificationNotes: workerProfile?.verificationNotes || "",
-            ratingAvg: workerProfile?.ratingAvg ?? 0,
-            completedJobs: workerProfile?.completedJobs ?? 0,
           },
           { merge: true },
         );
+      }
 
-        await createNotification({
+      await batch.commit();
+      updateLocalProfile(nextProfile);
+      let notificationWarning = "";
+      if (profile.role === "trabajador") {
+        const [notificationResult] = await Promise.allSettled([createNotification({
           userId: profile.uid,
           type: "verification",
           title: "Perfil profesional actualizado",
           message: "Tus datos quedaron guardados. Administración puede revisar tu verificación.",
           relatedEntityId: profile.uid,
           relatedEntityType: "workerProfile",
-        });
+        })]);
+        if (notificationResult.status === "rejected") notificationWarning = " No pudimos enviar la notificación.";
       }
-
-      updateLocalProfile(nextProfile);
-      setStatus("Perfil actualizado correctamente.");
+      setStatus(`Perfil actualizado correctamente.${notificationWarning}`);
     } catch {
       setError("No pudimos guardar los cambios en Firestore.");
     } finally {
@@ -190,12 +201,18 @@ export function ProfileForm() {
           {profile.role === "trabajador" && (
             <div className="mt-4 rounded-3xl bg-emerald-50 p-4">
               <p className="text-sm text-emerald-800">Verificación</p>
-              <p className="mt-1 text-xl font-black capitalize text-emerald-950">{workerProfile?.verificationStatus || "pending"}</p>
-              {workerProfile?.verificationNotes && <p className="mt-2 text-sm text-emerald-900">{workerProfile.verificationNotes}</p>}
+              <p className="mt-1 text-xl font-black capitalize text-emerald-950">{resolveVerificationStatus(workerProfile, verification)}</p>
+              {verification?.notes && <p className="mt-2 text-sm text-emerald-900">{verification.notes}</p>}
             </div>
           )}
           {(error || status) && (
-            <p className={`mt-4 rounded-2xl px-4 py-3 text-sm font-semibold ${error ? "bg-rose-50 text-rose-700" : "bg-emerald-50 text-emerald-800"}`}>{error || status}</p>
+            <p
+              aria-live="polite"
+              className={`mt-4 rounded-2xl px-4 py-3 text-sm font-semibold ${error ? "bg-rose-50 text-rose-700" : "bg-emerald-50 text-emerald-800"}`}
+              role={error ? "alert" : "status"}
+            >
+              {error || status}
+            </p>
           )}
           <button className="primary-button mt-5 min-h-12 w-full" type="submit" disabled={loading}>
             {loading ? "Guardando..." : "Guardar perfil"}

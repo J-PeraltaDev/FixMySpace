@@ -4,7 +4,8 @@ import { doc, getDoc } from "firebase/firestore";
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { db } from "@/firebase";
-import type { WorkerProfile } from "@/lib/types";
+import { resolveVerificationStatus } from "@/lib/firebase-data";
+import type { WorkerProfile, WorkerVerification } from "@/lib/types";
 import { useAuth } from "./AuthProvider";
 import { EmptyState } from "./EmptyState";
 import { StatusBadge } from "./StatusBadge";
@@ -12,6 +13,7 @@ import { StatusBadge } from "./StatusBadge";
 export function VerificationPanel() {
   const { profile } = useAuth();
   const [workerProfile, setWorkerProfile] = useState<Partial<WorkerProfile> | null>(null);
+  const [verification, setVerification] = useState<Partial<WorkerVerification> | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
@@ -25,8 +27,12 @@ export function VerificationPanel() {
       }
 
       try {
-        const snapshot = await getDoc(doc(db, "workerProfiles", profile.uid));
-        if (!cancelled) setWorkerProfile(snapshot.exists() ? (snapshot.data() as Partial<WorkerProfile>) : null);
+        const [profileSnapshot, verificationSnapshot] = await Promise.all([
+          getDoc(doc(db, "workerProfiles", profile.uid)),
+          getDoc(doc(db, "workerVerifications", profile.uid)),
+        ]);
+        if (!cancelled) setWorkerProfile(profileSnapshot.exists() ? (profileSnapshot.data() as Partial<WorkerProfile>) : null);
+        if (!cancelled) setVerification(verificationSnapshot.exists() ? (verificationSnapshot.data() as Partial<WorkerVerification>) : null);
       } catch {
         if (!cancelled) setError("No pudimos leer tu verificación.");
       } finally {
@@ -59,7 +65,7 @@ export function VerificationPanel() {
   if (loading) return <div className="soft-card h-44 animate-pulse bg-white" />;
   if (error) return <p className="rounded-2xl bg-rose-50 px-4 py-3 text-sm font-semibold text-rose-700">{error}</p>;
 
-  const verificationStatus = workerProfile?.verificationStatus || "pending";
+  const verificationStatus = resolveVerificationStatus(workerProfile, verification);
 
   return (
     <div className="grid gap-6 lg:grid-cols-[1fr_360px]">
@@ -81,7 +87,7 @@ export function VerificationPanel() {
             <p className="mt-1 font-bold text-[#191c1b]">{workerProfile?.coverageAreas?.join(", ") || "Pendiente"}</p>
           </div>
         </div>
-        {workerProfile?.verificationNotes && <p className="mt-5 rounded-xl bg-[#bfecdd] p-4 text-sm font-semibold text-[#00261e]">{workerProfile.verificationNotes}</p>}
+        {verification?.notes && <p className="mt-5 rounded-xl bg-[#bfecdd] p-4 text-sm font-semibold text-[#00261e]">{verification.notes}</p>}
       </section>
 
       <aside className="soft-card h-fit p-5">

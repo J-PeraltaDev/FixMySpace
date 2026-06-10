@@ -104,7 +104,7 @@ describe("MessagesInbox", () => {
     });
   });
 
-  it("renders sorted hook-fed conversations with targeted partner lookups", async () => {
+  it("renders sorted hook-fed conversations with targeted public profile lookups", async () => {
     render(<MessagesInbox />);
 
     await screen.findByRole("heading", { name: "Nueva Persona" });
@@ -120,12 +120,13 @@ describe("MessagesInbox", () => {
       { enabled: true },
     );
     expect(mockUseCollection).not.toHaveBeenCalledWith("users");
-    expect(mockDoc).toHaveBeenCalledWith({}, "users", "worker-new");
-    expect(mockDoc).toHaveBeenCalledWith({}, "users", "worker-old");
+    expect(mockDoc).toHaveBeenCalledWith({}, "publicProfiles", "worker-new");
+    expect(mockDoc).toHaveBeenCalledWith({}, "publicProfiles", "worker-old");
+    expect(mockDoc).not.toHaveBeenCalledWith({}, "users", expect.any(String));
     await waitFor(() => expect(mockGetDoc).toHaveBeenCalledTimes(2));
   });
 
-  it("renders a fallback row when one partner lookup fails", async () => {
+  it("reports missing Firebase identity without showing generic role labels", async () => {
     mockGetDoc.mockImplementation(async (reference) => {
       const partnerId = (reference as { id: string }).id;
       if (partnerId === "worker-new") {
@@ -143,11 +144,11 @@ describe("MessagesInbox", () => {
 
     render(<MessagesInbox />);
 
-    await screen.findByRole("heading", { name: "Conversación" });
+    await screen.findByRole("heading", { name: "Perfil no disponible" });
 
-    expect(screen.getByRole("heading", { name: "Conversación" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Perfil no disponible" })).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "Vieja Persona" })).toBeInTheDocument();
-    expect(screen.getByText("usuario")).toBeInTheDocument();
+    expect(screen.queryByText("usuario")).not.toBeInTheDocument();
     expect(screen.queryByText("No pudimos preparar la lista de mensajes.")).not.toBeInTheDocument();
   });
 

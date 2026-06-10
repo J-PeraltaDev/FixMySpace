@@ -10,11 +10,12 @@ import {
   serverTimestamp,
   setDoc,
   updateDoc,
+  writeBatch,
   where,
 } from "firebase/firestore";
 import { getDownloadURL, ref, uploadBytes } from "firebase/storage";
-import { db, storage } from "@/firebase";
-import { workers as fallbackWorkers } from "./mock-data";
+import { auth, db, storage } from "@/firebase";
+import { normalizeWorkerProfile } from "./worker-profile";
 import type {
   Booking,
   JobEvidence,
@@ -23,29 +24,20 @@ import type {
   Review,
   ServiceRequest,
   SupportReport,
+  AdminWorkerProfile,
+  PublicProfile,
   UserProfile,
   WorkerProfile,
+  WorkerVerification,
 } from "./types";
 
 type AnyRecord = Record<string, unknown>;
 
-export const serviceRequestStatuses = ["pending", "accepted", "scheduled", "completed", "cancelled"] as const;
+export const serviceRequestStatuses = ["pending", "negotiating", "accepted", "scheduled", "completed", "cancelled", "rejected"] as const;
 export const bookingStatuses = ["accepted", "scheduled", "completed", "cancelled"] as const;
 
 function dataWithId<T>(snapshot: QueryDocumentSnapshot<DocumentData>) {
   return { id: snapshot.id, ...snapshot.data() } as T;
-}
-
-function asString(value: unknown, fallback = "") {
-  return typeof value === "string" ? value : fallback;
-}
-
-function asNumber(value: unknown, fallback = 0) {
-  return typeof value === "number" && Number.isFinite(value) ? value : fallback;
-}
-
-function asStringArray(value: unknown) {
-  return Array.isArray(value) ? value.filter((item): item is string => typeof item === "string") : [];
 }
 
 export function timestampToText(value: unknown) {
@@ -58,48 +50,23 @@ export function timestampToText(value: unknown) {
   return "Fecha registrada";
 }
 
-function mergeWorker(uid: string, profileData: AnyRecord, userData: AnyRecord = {}): WorkerProfile {
-  const fallback = fallbackWorkers.find((worker) => worker.uid === uid);
-
-  return {
-    uid,
-    fullName: asString(userData.fullName, fallback?.fullName || "Trabajador FixMySpace"),
-    municipality: asString(userData.municipality, fallback?.municipality || ""),
-    avatarUrl: asString(userData.avatarUrl, fallback?.avatarUrl || ""),
-    specialties: asStringArray(profileData.specialties),
-    coverageAreas: asStringArray(profileData.coverageAreas),
-    bio: asString(profileData.bio, fallback?.bio || "Perfil profesional en construcción."),
-    experienceYears: asNumber(profileData.experienceYears, fallback?.experienceYears || 0),
-    hourlyRate: asNumber(profileData.hourlyRate, fallback?.hourlyRate || 0),
-    verified: Boolean(profileData.verified),
-    verificationStatus: asString(profileData.verificationStatus, Boolean(profileData.verified) ? "verified" : "pending") as WorkerProfile["verificationStatus"],
-    verificationNotes: asString(profileData.verificationNotes),
-    verifiedAt: profileData.verifiedAt,
-    verifiedBy: asString(profileData.verifiedBy),
-    ratingAvg: asNumber(profileData.ratingAvg, fallback?.ratingAvg || 0),
-    completedJobs: asNumber(profileData.completedJobs, fallback?.completedJobs || 0),
-    distanceKm: asNumber(profileData.distanceKm, fallback?.distanceKm || 0),
-    responseTime: asString(profileData.responseTime, fallback?.responseTime || "Responde pronto"),
-  };
-}
-
 export async function fetchWorkers() {
-  const snapshots = await getDocs(collection(db, "workerProfiles"));
-  const workers = await Promise.all(
-    snapshots.docs.map(async (workerSnapshot) => {
-      const userSnapshot = await getDoc(doc(db, "users", workerSnapshot.id));
-      return mergeWorker(workerSnapshot.id, workerSnapshot.data(), userSnapshot.exists() ? userSnapshot.data() : {});
-    }),
-  );
-
-  return workers;
+  const snapshots = await getDocs(query(collection(db, "workerProfiles"), where("published", "==", true)));
+  return snapshots.docs.map((workerSnapshot) => normalizeWorkerProfile(workerSnapshot.id, workerSnapshot.data()));
 }
 
 export async function fetchWorkerById(uid: string) {
-  const workerSnapshot = await getDoc(doc(db, "workerProfiles", uid));
+  const [workerSnapshot, publicSnapshot] = await Promise.all([
+    getDoc(doc(db, "workerProfiles", uid)),
+    getDoc(doc(db, "publicProfiles", uid)),
+  ]);
   if (!workerSnapshot.exists()) return null;
-  const userSnapshot = await getDoc(doc(db, "users", uid));
-  return mergeWorker(uid, workerSnapshot.data(), userSnapshot.exists() ? userSnapshot.data() : {});
+  return normalizeWorkerProfile(uid, workerSnapshot.data(), publicSnapshot.exists() ? publicSnapshot.data() : {});
+}
+
+export async function fetchPublicProfile(uid: string) {
+  const snapshot = await getDoc(doc(db, "publicProfiles", uid));
+  return snapshot.exists() ? ({ uid, ...snapshot.data() } as PublicProfile) : null;
 }
 
 export async function fetchReviewsByWorker(workerId: string) {
@@ -136,8 +103,11 @@ export async function uploadImage(file: File, path: string) {
 }
 
 export async function createNotification(input: Omit<Notification, "id" | "createdAt" | "read"> & { read?: boolean }) {
+  const actorId = auth.currentUser?.uid;
+  if (!actorId) throw new Error("Se requiere una sesión activa para crear notificaciones.");
   await addDoc(collection(db, "notifications"), {
     ...input,
+    actorId,
     read: input.read ?? false,
     createdAt: serverTimestamp(),
   });
@@ -147,45 +117,197 @@ export async function markNotificationRead(id: string) {
   await updateDoc(doc(db, "notifications", id), { read: true });
 }
 
-export async function ensureWorkerProfile(uid: string, municipality = "") {
+export async function syncPublicProfile(profile: UserProfile) {
+  const publicProfile = buildPublicProfile(profile);
+  const batch = writeBatch(db);
+  batch.set(doc(db, "publicProfiles", profile.uid), publicProfile, { merge: true });
+  if (profile.role === "trabajador") {
+    const workerSnapshot = await getDoc(doc(db, "workerProfiles", profile.uid));
+    batch.set(
+      doc(db, "workerProfiles", profile.uid),
+      workerSnapshot.exists()
+        ? {
+            uid: profile.uid,
+            role: "trabajador",
+            fullName: profile.fullName,
+            municipality: profile.municipality,
+            avatarUrl: profile.avatarUrl || "",
+          }
+        : buildWorkerProfile(profile),
+      { merge: true },
+    );
+  }
+  await batch.commit();
+}
+
+export function buildPublicProfile(profile: UserProfile): PublicProfile {
+  return {
+    uid: profile.uid,
+    role: profile.role,
+    fullName: profile.fullName,
+    municipality: profile.municipality,
+    avatarUrl: profile.avatarUrl || "",
+  };
+}
+
+export function buildWorkerProfile(profile: Pick<UserProfile, "uid" | "fullName" | "municipality" | "avatarUrl">) {
+  return {
+    uid: profile.uid,
+    role: "trabajador",
+    fullName: profile.fullName || "Perfil sin nombre",
+    municipality: profile.municipality,
+    avatarUrl: profile.avatarUrl || "",
+    specialties: [],
+    coverageAreas: profile.municipality ? [profile.municipality] : [],
+    bio: "",
+    experienceYears: 0,
+    hourlyRate: 0,
+    verified: false,
+    published: false,
+    ratingAvg: 0,
+    completedJobs: 0,
+    distanceKm: 0,
+    responseTime: "Responde pronto",
+  };
+}
+
+export async function ensureWorkerProfile(uid: string, municipality = "", identity: Partial<PublicProfile> = {}) {
   await setDoc(
     doc(db, "workerProfiles", uid),
-    {
-      specialties: [],
-      coverageAreas: municipality ? [municipality] : [],
-      bio: "",
-      experienceYears: 0,
-      hourlyRate: 0,
-      verified: false,
-      verificationStatus: "pending",
-      verificationNotes: "",
-      verifiedAt: null,
-      verifiedBy: "",
-      ratingAvg: 0,
-      completedJobs: 0,
-    },
+    buildWorkerProfile({
+      uid,
+      fullName: identity.fullName || "Perfil sin nombre",
+      municipality,
+      avatarUrl: identity.avatarUrl || "",
+    }),
     { merge: true },
   );
 }
 
 export async function fetchAdminCollections() {
-  const [users, workerProfiles, serviceRequests, bookings, reviews, reports, notifications] = await Promise.all([
+  const [users, workerProfiles, workerVerifications, serviceRequests, bookings, reviews, reports, notifications] = await Promise.all([
     getDocs(collection(db, "users")),
-    fetchWorkers(),
+    getDocs(collection(db, "workerProfiles")),
+    getDocs(collection(db, "workerVerifications")),
     getDocs(collection(db, "serviceRequests")),
     getDocs(collection(db, "bookings")),
     getDocs(collection(db, "reviews")),
     getDocs(collection(db, "supportReports")),
     getDocs(collection(db, "notifications")),
   ]);
+  const verificationByWorker = new Map(
+    workerVerifications.docs.map((snapshot) => [snapshot.id, snapshot.data() as WorkerVerification]),
+  );
+  const userById = new Map(users.docs.map((snapshot) => [snapshot.id, snapshot.data() as UserProfile]));
+  const adminWorkers: AdminWorkerProfile[] = workerProfiles.docs.map((snapshot) => {
+    const worker = normalizeWorkerProfile(snapshot.id, snapshot.data(), userById.get(snapshot.id) as AnyRecord | undefined);
+    return {
+      ...worker,
+      verificationStatus: resolveVerificationStatus(worker, verificationByWorker.get(worker.uid)),
+    };
+  });
 
   return {
     users: users.docs.map((snapshot) => ({ uid: snapshot.id, ...snapshot.data() }) as UserProfile),
-    workers: workerProfiles,
+    workers: adminWorkers,
     serviceRequests: serviceRequests.docs.map((snapshot) => dataWithId<ServiceRequest>(snapshot)),
     bookings: bookings.docs.map((snapshot) => dataWithId<Booking>(snapshot)),
     reviews: reviews.docs.map((snapshot) => dataWithId<Review>(snapshot)),
     reports: reports.docs.map((snapshot) => dataWithId<SupportReport>(snapshot)),
     notifications: notifications.docs.map((snapshot) => dataWithId<Notification>(snapshot)),
   };
+}
+
+export function resolveVerificationStatus(
+  workerProfile: Pick<Partial<WorkerProfile>, "verified"> | null | undefined,
+  verification: Pick<Partial<WorkerVerification>, "status"> | null | undefined,
+): WorkerVerification["status"] {
+  if (verification?.status === "verified" || verification?.status === "rejected" || verification?.status === "pending") {
+    return verification.status;
+  }
+  return workerProfile?.verified ? "verified" : "pending";
+}
+
+export async function modifyRequestProposal(
+  requestId: string,
+  proposedPrice: number,
+  proposedDate: string,
+  proposedTime: string,
+  userId: string,
+) {
+  await updateDoc(doc(db, "serviceRequests", requestId), {
+    status: "negotiating",
+    proposedPrice,
+    proposedDate,
+    proposedTime,
+    lastProposalBy: userId,
+  });
+}
+
+export async function rejectRequestProposal(requestId: string) {
+  await updateDoc(doc(db, "serviceRequests", requestId), {
+    status: "rejected",
+  });
+}
+
+export async function acceptRequestProposal(
+  request: ServiceRequest,
+  clientId: string,
+  workerId: string,
+) {
+  const batch = writeBatch(db);
+  const requestRef = doc(db, "serviceRequests", request.id);
+  
+  // Set final values based on proposal
+  const finalPrice = request.proposedPrice ?? request.price ?? 0;
+  const finalDate = request.proposedDate ?? request.preferredDate;
+  const finalTime = request.proposedTime ?? request.preferredTime;
+  
+  batch.update(requestRef, {
+    status: "scheduled",
+    price: finalPrice,
+    preferredDate: finalDate,
+    preferredTime: finalTime,
+    // Clear proposal fields if desired, or keep them for history
+  });
+
+  const bookingRef = doc(collection(db, "bookings"));
+  const scheduledAt = `${finalDate} ${finalTime}`;
+  
+  batch.set(bookingRef, {
+    requestId: request.id,
+    clientId,
+    workerId,
+    scheduledAt,
+    status: "scheduled",
+    notes: request.description,
+    createdAt: serverTimestamp(),
+    updatedAt: serverTimestamp(),
+  });
+
+  batch.set(doc(db, "jobHistory", `${bookingRef.id}_${clientId}`), {
+    bookingId: bookingRef.id,
+    userId: clientId,
+    clientId,
+    workerId,
+    service: request.title,
+    status: "scheduled",
+    events: ["Solicitud aceptada y agendada"],
+    createdAt: serverTimestamp(),
+    updatedAt: serverTimestamp(),
+  });
+
+  batch.set(doc(db, "jobHistory", `${bookingRef.id}_${workerId}`), {
+    bookingId: bookingRef.id,
+    userId: workerId,
+    clientId,
+    workerId,
+    service: request.title,
+    status: "scheduled",
+    events: ["Nueva reserva asignada"],
+    createdAt: serverTimestamp(),
+    updatedAt: serverTimestamp(),
+  });
+
+  await batch.commit();
 }

@@ -1,6 +1,6 @@
 "use client";
 
-import { addDoc, collection, serverTimestamp } from "firebase/firestore";
+import { doc, serverTimestamp, setDoc } from "firebase/firestore";
 import { FormEvent, useState } from "react";
 import { db } from "@/firebase";
 import { createNotification } from "@/lib/firebase-data";
@@ -18,21 +18,21 @@ export function RatingForm({ workerId, bookingId = "" }: { workerId?: string; bo
     setStatus("");
     setError("");
 
-    if (!profile || !workerId) {
-      setError("Inicia sesión y selecciona un trabajador para guardar la reseña.");
+    if (!profile || !workerId || !bookingId) {
+      setError("Solo puedes calificar un servicio completado desde su historial.");
       return;
     }
 
     const data = new FormData(event.currentTarget);
     const comment = String(data.get("comment") || "").trim();
-    if (!comment) {
-      setError("Escribe un comentario corto sobre el servicio.");
+    if (comment.length < 3 || comment.length > 1000) {
+      setError("El comentario debe tener entre 3 y 1000 caracteres.");
       return;
     }
 
     try {
       setLoading(true);
-      await addDoc(collection(db, "reviews"), {
+      await setDoc(doc(db, "reviews", bookingId), {
         bookingId,
         clientId: profile.uid,
         workerId,
@@ -68,9 +68,9 @@ export function RatingForm({ workerId, bookingId = "" }: { workerId?: string; bo
       </label>
       <label className="field">
         <span>Comentario</span>
-        <textarea name="comment" rows={4} placeholder="Cuenta cómo fue el servicio" />
+        <textarea name="comment" rows={4} maxLength={1001} placeholder="Cuenta cómo fue el servicio" />
       </label>
-      {(error || status) && <p className={`rounded-2xl px-4 py-3 text-sm font-semibold ${error ? "bg-rose-50 text-rose-700" : "bg-emerald-50 text-emerald-800"}`}>{error || status}</p>}
+      {(error || status) && <p role={error ? "alert" : "status"} className={`rounded-2xl px-4 py-3 text-sm font-semibold ${error ? "bg-rose-50 text-rose-700" : "bg-emerald-50 text-emerald-800"}`}>{error || status}</p>}
       <button className="secondary-button w-fit" type="submit" disabled={loading}>
         {loading ? "Guardando..." : "Guardar reseña"}
       </button>
