@@ -46,35 +46,6 @@ export function DashboardView() {
   const { data: publicProfiles } = useCollection<PublicProfile>("publicProfiles", [], { enabled: collectionEnabled });
   const publicNameById = new Map(publicProfiles.map((item) => [item.uid, item.fullName]));
 
-  const quickActions = useMemo(() => {
-    if (role === "admin") {
-      return [
-        { href: "/admin", label: "Administración" },
-        { href: "/verificacion", label: "Verificación" },
-        { href: "/mensajes", label: "Mensajes" },
-        { href: "/notificaciones", label: "Notificaciones" },
-      ];
-    }
-
-    if (role === "trabajador") {
-      return [
-        { href: "/dashboard", label: "Inicio" },
-        { href: "/trabajos", label: "Bolsa de trabajos" },
-        { href: "/mensajes", label: "Mensajes" },
-        { href: "/perfil", label: "Mi perfil" },
-        { href: "/verificacion", label: "Verificación" },
-        { href: "/historial", label: "Historial" },
-      ];
-    }
-
-    return [
-      { href: "/buscar", label: "Buscar trabajadores" },
-      { href: "/solicitudes/nueva", label: "Nueva solicitud" },
-      { href: "/mensajes", label: "Mensajes" },
-      { href: "/historial", label: "Historial" },
-    ];
-  }, [role]);
-
   const unread = notifications.filter((item) => !item.read).length;
   const activeServices = bookings.filter((booking) => !["completed", "cancelled"].includes(booking.status)).length;
 
@@ -98,17 +69,7 @@ export function DashboardView() {
         </Link>
       </div>
 
-      <div className="grid gap-6 lg:grid-cols-[240px_1fr]">
-        <aside className="soft-card h-fit p-4 lg:sticky lg:top-24">
-          <h2 className="section-title">Acciones rápidas</h2>
-          <nav className="mt-4 grid gap-2">
-            {quickActions.map((action) => (
-              <Link key={action.href} href={action.href} className="rounded-lg px-3 py-2 text-sm font-semibold text-[#414845] transition hover:bg-[#bfecdd] hover:text-[#00261e]">
-                {action.label}
-              </Link>
-            ))}
-          </nav>
-        </aside>
+      <div className="grid gap-6">
         <section className="grid gap-6">
           {notificationsError && <p className="rounded-lg bg-[#ffdad6] px-4 py-3 text-sm font-semibold text-[#93000a]">No pudimos leer tus notificaciones desde Firestore.</p>}
 

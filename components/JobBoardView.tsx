@@ -173,13 +173,13 @@ export function JobBoardView() {
 
                                 <div className="mt-auto grid gap-1 text-sm text-[#5f5e5a]">
                                     {request.preferredDate && (
-                                        <span>📅 {request.preferredDate} {request.preferredTime && `a las ${request.preferredTime}`}</span>
+                                        <span>Fecha: {request.preferredDate} {request.preferredTime && `a las ${request.preferredTime}`}</span>
                                     )}
                                     {request.price && (
-                                        <span>💰 ${request.price.toLocaleString("es-CO")} COP</span>
+                                        <span>Presupuesto: ${request.price.toLocaleString("es-CO")} COP</span>
                                     )}
                                     {request.address && (
-                                        <span>📍 {request.address}</span>
+                                        <span>Lugar: {request.address}</span>
                                     )}
                                 </div>
 

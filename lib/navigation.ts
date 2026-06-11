@@ -23,17 +23,18 @@ const clientNav: NavItem[] = [
 ];
 
 const workerNav: NavItem[] = [
-  { href: "/dashboard", label: "Solicitudes" },
+  { href: "/dashboard", label: "Inicio" },
+  { href: "/trabajos", label: "Bolsa de trabajos" },
   { href: "/mensajes", label: "Mensajes" },
+  { href: "/perfil", label: "Mi perfil" },
+  { href: "/verificacion", label: "Verificación" },
   { href: "/historial", label: "Historial" },
-  { href: "/verificacion", label: "Verificacion" },
-  { href: "/perfil", label: "Perfil" },
 ];
 
 const adminNav: NavItem[] = [
   { href: "/admin", label: "Admin" },
   { href: "/dashboard", label: "Panel" },
-  { href: "/verificacion", label: "Verificacion" },
+  { href: "/verificacion", label: "Verificación" },
   { href: "/notificaciones", label: "Avisos" },
   { href: "/ayuda", label: "Soporte" },
 ];

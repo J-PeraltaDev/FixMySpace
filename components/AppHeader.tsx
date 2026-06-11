@@ -64,12 +64,6 @@ export function AppHeader() {
           {profile && (
             <>
               <Link
-                href="/mensajes"
-                className="hidden h-10 items-center rounded-lg border border-[#c0c8c4] px-3 text-sm font-semibold text-[#00261e] transition hover:bg-[#eceeec] sm:inline-flex"
-              >
-                Mensajes
-              </Link>
-              <Link
                 href="/notificaciones"
                 className="relative hidden h-10 items-center rounded-lg border border-[#c0c8c4] px-3 text-sm font-semibold text-[#00261e] transition hover:bg-[#eceeec] sm:inline-flex"
               >
